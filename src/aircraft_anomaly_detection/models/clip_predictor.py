@@ -3,7 +3,7 @@ import clip
 from PIL import Image
 import os
 
-class ClipPredictor:
+class CLIP:
     def __init__(self, class_names=["defect", "no defect"], model_name='ViT-B/32', device=None):
         """
         Clip computes the similarity between a given image's embedding and text input's embeddings.
