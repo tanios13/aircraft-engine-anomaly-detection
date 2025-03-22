@@ -1,1 +1,5 @@
 ipykernel
+torch
+torchvision
+git+https://github.com/openai/CLIP.git
+pillow
