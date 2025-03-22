@@ -3,3 +3,6 @@ __pycache__/
 
 # ignore package files
 src/aircraft_anomaly_detection.egg-info
+
+# ignore model weights
+weights/
