@@ -17,7 +17,7 @@ class SAM:
         self.model = SamPredictor(sam_model)
 
 
-    def predict(self, image_path, boxes, multimask_output=False):
+    def predict(self, image_path, boxes, multimask_output=False, filter=True):
         """
         Predict masks
         """
@@ -25,18 +25,19 @@ class SAM:
         self.model.set_image(image)
 
         # Filter boxes
-        H, W, _ = image.shape
-        area_threshold = 0.1
-        filtered_boxes = [box for box in boxes if ((box[2]-box[0]) * (box[3]-box[1])) / (W * H) >= area_threshold]
+        if filter:
+            H, W, _ = image.shape
+            area_threshold = 0.1
+            boxes = [box for box in boxes if ((box[2]-box[0]) * (box[3]-box[1])) / (W * H) >= area_threshold]
 
         masks = []
-        for box in filtered_boxes:
+        for box in boxes:
             masks_pred, _, _ = self.model.predict(box=box, multimask_output=multimask_output)
             masks.append(masks_pred[0])
         return masks
 
 
-    def plot(self, image_path, boxes, masks, title="SAM Segmentation"):
+    def plot(self, image_path, boxes, masks, title="SAM Segmentation", filter=True):
         """
         Plot the masks
         """
@@ -44,12 +45,13 @@ class SAM:
         image_copy = image.copy()
 
         # Filter boxes
-        H, W, _ = image.shape
-        area_threshold = 0.1
-        filtered_boxes = [box for box in boxes if ((box[2]-box[0]) * (box[3]-box[1])) / (W * H) >= area_threshold]
+        if filter:
+            H, W, _ = image.shape
+            area_threshold = 0.1
+            boxes = [box for box in boxes if ((box[2]-box[0]) * (box[3]-box[1])) / (W * H) >= area_threshold]
 
         # Draw boxes
-        for box in filtered_boxes:
+        for box in boxes:
             x0, y0, x1, y1 = box
             cv2.rectangle(image_copy, (x0, y0), (x1, y1), (0, 255, 0), 2)
 

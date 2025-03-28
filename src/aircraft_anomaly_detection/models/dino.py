@@ -15,7 +15,7 @@ class DINO:
         self.model = load_model(config_path, weights_path, device=device)
 
 
-    def predict(self, image_path, prompt, box_threshold=0.1, text_threshold=0.5):
+    def predict(self, image_path, prompt, box_threshold=0.5, text_threshold=0.5):
         """
         Predict bounding boxes
         """
