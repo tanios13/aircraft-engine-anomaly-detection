@@ -1,6 +1,8 @@
 # aircraft-engine-anomaly-detection
 
-## Initiliaze python environment
+
+
+## Initiliaze python environmentbrew install uv
 1. Download the package in editable mode:
 ```
 pip install -e .

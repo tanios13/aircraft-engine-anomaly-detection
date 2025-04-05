@@ -1,8 +1,8 @@
+import matplotlib.patches as patches
+import matplotlib.pyplot as plt
 import torch
 from PIL import Image
-import matplotlib.pyplot as plt
-import matplotlib.patches as patches
-from transformers import OwlViTProcessor, OwlViTForObjectDetection
+from transformers import OwlViTForObjectDetection, OwlViTProcessor
 
 
 class OwlViT:
@@ -14,7 +14,6 @@ class OwlViT:
         self.processor = OwlViTProcessor.from_pretrained(model_path)
         self.model = OwlViTForObjectDetection.from_pretrained(model_path).to(self.device)
 
-
     def predict(self, image_path, text_prompts, undamaged_idxes=[], threshold=0.01, top_k=2):
         """
         Run OwlViT on an image and return filtered boxes and labels.
@@ -24,14 +23,17 @@ class OwlViT:
         outputs = self.model(**inputs)
 
         target_sizes = torch.Tensor([image.size[::-1]]).to(self.device)
-        results = self.processor.post_process_grounded_object_detection(outputs=outputs, threshold=threshold, target_sizes=target_sizes)
+        results = self.processor.post_process_grounded_object_detection(
+            outputs=outputs, threshold=threshold, target_sizes=target_sizes
+        )
 
         # Retrieve predictions for the first image
-        i = 0  
-        boxes, scores, labels = self._filter_boxes(results[i]["boxes"], results[i]["scores"], results[i]["labels"], undamaged_idxes, top_k)
+        i = 0
+        boxes, scores, labels = self._filter_boxes(
+            results[i]["boxes"], results[i]["scores"], results[i]["labels"], undamaged_idxes, top_k
+        )
 
         return image, boxes, scores, labels
-
 
     def plot(self, image, text_prompts, boxes, labels_idx, scores):
         """
@@ -39,34 +41,29 @@ class OwlViT:
         """
         # Proceed if any match found
         if boxes:
-
             _, ax = plt.subplots(1, figsize=(6, 6))
             ax.imshow(image)
 
             for idx in range(len(boxes)):
                 box = boxes[idx].tolist()
-                x1, y1, x2, y2 = [max(0, v) for v in box]
+                x1, y1, x2, y2 = (max(0, v) for v in box)
                 width, height = x2 - x1, y2 - y1
 
-                rect = patches.Rectangle((x1, y1), width, height, linewidth=2, edgecolor='red', facecolor='none')
+                rect = patches.Rectangle((x1, y1), width, height, linewidth=2, edgecolor="red", facecolor="none")
                 ax.add_patch(rect)
 
                 label = text_prompts[labels_idx[idx].item()]
                 conf = scores[idx].item()
                 label_text = f"{label} ({conf:.2f})"
-                ax.text(x1, y1 - 10, label_text, color='red', fontsize=12, backgroundcolor='white')
+                ax.text(x1, y1 - 10, label_text, color="red", fontsize=12, backgroundcolor="white")
 
-            plt.axis('off')
+            plt.axis("off")
             plt.tight_layout()
             plt.show()
         else:
             print("No defect found")
 
-
-
-
-#--------------------------------------------------------HELPERS--------------------------------------------------------#
-
+    # --------------------------------------------------------HELPERS--------------------------------------------------------#
 
     def _filter_boxes(self, boxes, scores, labels, undamaged_idxes, top_k):
         """

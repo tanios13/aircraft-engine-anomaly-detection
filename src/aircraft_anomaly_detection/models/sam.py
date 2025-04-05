@@ -1,10 +1,9 @@
 import cv2
-import torch
-import numpy as np
 import matplotlib.pyplot as plt
-
-from segment_anything import SamPredictor, sam_model_registry
+import numpy as np
+import torch
 from groundingdino.util.inference import load_image
+from segment_anything import SamPredictor, sam_model_registry
 
 
 class SAM:
@@ -15,7 +14,6 @@ class SAM:
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         sam_model = sam_model_registry[model_type](checkpoint=checkpoint_path).to(device)
         self.model = SamPredictor(sam_model)
-
 
     def predict(self, image_path, boxes, multimask_output=False, filter=True):
         """
@@ -28,14 +26,13 @@ class SAM:
         if filter:
             H, W, _ = image.shape
             area_threshold = 0.1
-            boxes = [box for box in boxes if ((box[2]-box[0]) * (box[3]-box[1])) / (W * H) >= area_threshold]
+            boxes = [box for box in boxes if ((box[2] - box[0]) * (box[3] - box[1])) / (W * H) >= area_threshold]
 
         masks = []
         for box in boxes:
             masks_pred, _, _ = self.model.predict(box=box, multimask_output=multimask_output)
             masks.append(masks_pred[0])
         return masks
-
 
     def plot(self, image_path, boxes, masks, title="SAM Segmentation", filter=True):
         """
@@ -48,7 +45,7 @@ class SAM:
         if filter:
             H, W, _ = image.shape
             area_threshold = 0.1
-            boxes = [box for box in boxes if ((box[2]-box[0]) * (box[3]-box[1])) / (W * H) >= area_threshold]
+            boxes = [box for box in boxes if ((box[2] - box[0]) * (box[3] - box[1])) / (W * H) >= area_threshold]
 
         # Draw boxes
         for box in boxes:
@@ -61,6 +58,6 @@ class SAM:
 
         plt.figure(figsize=(10, 10))
         plt.imshow(cv2.cvtColor(image_copy.astype(np.uint8), cv2.COLOR_BGR2RGB))
-        plt.axis('off')
+        plt.axis("off")
         plt.title(title)
         plt.show()

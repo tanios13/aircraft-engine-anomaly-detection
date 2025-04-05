@@ -1,10 +1,12 @@
-import torch
-import clip
-from PIL import Image
 import os
 
+import clip
+import torch
+from PIL import Image
+
+
 class CLIP:
-    def __init__(self, class_names=["defect", "no defect"], model_name='ViT-B/32', device=None):
+    def __init__(self, class_names=["defect", "no defect"], model_name="ViT-B/32", device=None):
         """
         Clip computes the similarity between a given image's embedding and text input's embeddings.
         """
@@ -18,8 +20,11 @@ class CLIP:
         This method takes an image path as input and returns the predictions.
         """
         if os.path.isdir(image_path):
-            image_files = [os.path.join(image_path, f) for f in os.listdir(image_path)
-                           if f.lower().endswith(('png', 'jpg', 'jpeg', 'bmp'))]
+            image_files = [
+                os.path.join(image_path, f)
+                for f in os.listdir(image_path)
+                if f.lower().endswith(("png", "jpg", "jpeg", "bmp"))
+            ]
         else:
             image_files = [image_path]
 
