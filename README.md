@@ -89,7 +89,7 @@ irm https://astral.sh/uv/install.ps1 | iex
 
 4. **(Optional) Install dev dependencies**:
    ```bash
-   uv sync --dev
+   uv sync --all-extras
    ```
 
 5. **(Optional) Editable Install** (like `pip install -e .`):
@@ -148,7 +148,7 @@ from aircraft_anomaly_detection.models import clip_predictor
 
 1. **Install dev dependencies** (if you haven’t already):
    ```bash
-   uv sync --dev
+   uv sync --all-extras
    ```
 2. **Lint and format**:
    ```bash
