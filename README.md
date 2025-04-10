@@ -20,13 +20,8 @@ Anomaly detection in aircraft engines using state-of-the-art (SOTA) zero-shot mo
 ├── src
 │   ├── aircraft_anomaly_detection
 │   │   ├── __init__.py
-│   │   ├── __pycache__
-│   │   │   └── __init__.cpython-310.pyc
 │   │   └── models
 │   │       ├── __init__.py
-│   │       ├── __pycache__
-│   │       │   ├── __init__.cpython-310.pyc
-│   │       │   └── clip_predictor.cpython-310.pyc
 │   │       ├── clip_predictor.py
 │   │       ├── config
 │   │       │   └── GroundingDINO_SwinT_OGC.py

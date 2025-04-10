@@ -12,6 +12,7 @@ class Metadata(BaseModel):
     component: str  # e.g., oil_pump, pistons, etc.
     condition: str  # e.g., normal, scratched
     ground_truth: FilePath | None = None  # Optional ground truth field
+    image_path: FilePath | None = None  # Optional image path field
     description: str = Field(default="")  # Optional description field
 
 
@@ -160,6 +161,7 @@ class AnomalyDataset:
                             component=folder_name,
                             condition="normal",
                             description=f"MVTech {source_desc} (train)",
+                            image_path=file,
                         )
                     )
 
@@ -184,6 +186,7 @@ class AnomalyDataset:
                                     condition=condition,
                                     description=f"MVTech {source_desc} (test)",
                                     ground_truth=gt if gt.exists() else None,
+                                    image_path=file,
                                 )
                             )
 
