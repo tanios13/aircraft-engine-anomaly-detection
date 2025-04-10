@@ -1,6 +1,7 @@
 import os
 import pathlib
 import tarfile
+from collections.abc import Callable
 from typing import Literal
 
 from PIL import Image  # Optional: for loading images
@@ -39,6 +40,12 @@ class AnomalyDataset:
             self._load("mvtech")
         else:
             self._load(self.dataset)
+
+    def __repr__(self) -> str:
+        """Return a string representation of the dataset."""
+        self.components = set(meta.component for meta in self.metadata)
+        return f"AnomalyDataset(dataset={self.dataset}, num_samples={len(self.data)}) \n \
+                components={self.components})"
 
     def _load(self, dataset: Literal["synthetic", "mvtech"]) -> None:
         """
@@ -83,21 +90,22 @@ class AnomalyDataset:
                                 self.metadata.append(Metadata(component=component_dir.name, condition=condition))
             print(f"Loaded {len(self.data)} files from synthetic dataset at {synthetic_root}")
         elif dataset == "mvtech":
-            # Look for tar.xz files in the data folder.
             mvtech_root = self.data_root / "mvtech"
-            mvtech_tar_files = list(mvtech_root.glob("*.tar.xz"))
-            if not mvtech_tar_files:
-                raise ValueError(f"No tar.xz files found for mvtech dataset in {self.data_root}")
+            if not mvtech_root.exists():
+                raise ValueError(f"MVTech folder {mvtech_root} does not exist.")
 
-            # Process each tar file.
+            processed_folders = set()
+
+            # First, check for tar.xz files.
+            mvtech_tar_files = list(mvtech_root.glob("*.tar.xz"))
             for tar_file in sorted(mvtech_tar_files):
                 if not tar_file.is_file():
                     continue
-
-                # Determine the expected extracted folder name by removing the ".tar.xz" suffix.
-                # For example, "cable.tar.xz" becomes "cable".
+                # Determine the expected extracted folder name.
                 folder_name = tar_file.name[:-7] if tar_file.name.endswith(".tar.xz") else tar_file.stem
+                processed_folders.add(folder_name)
                 extracted_folder = mvtech_root / folder_name
+
                 if not extracted_folder.exists():
                     print(f"Extracting {tar_file} into {extracted_folder} ...")
                     try:
@@ -111,64 +119,73 @@ class AnomalyDataset:
                 else:
                     print(f"Using existing extracted folder: {extracted_folder}")
                     self._fix_permissions(extracted_folder)
+                self._process_mvtech_extracted_folder(extracted_folder, source_desc=tar_file.name)
 
-                # Now assume that the extracted folder has a structure similar to:
-                #   <extracted_folder>/
-                #       train/
-                #           good/
-                #       test/
-                #           <condition>/   (e.g., bent_wire, cable_swap, etc.)
-                #       ground_truth/ (optional, for test images with anomalies)
-                #
-                # Load training images: only "good" images.
-                train_good_dir = extracted_folder / "train" / "good"
-                if train_good_dir.exists():
-                    for file in sorted(train_good_dir.iterdir()):
-                        if file.is_file() and file.suffix.lower() in [".jpg", ".jpeg", ".png", ".bmp"]:
-                            self.data.append(file)
-                            self.labels.append(0)  # Good images
-                            self.metadata.append(
-                                Metadata(
-                                    component=folder_name,
-                                    condition="normal",
-                                    description=f"MVTech {tar_file.name} (train)",
-                                )
-                            )
-
-                # Load test images from the "test" folder.
-                test_dir = extracted_folder / "test"
-                # Optionally, load corresponding ground truth masks from the ground_truth folder.
-                ground_truth_dir = extracted_folder / "ground_truth"
-
-                if test_dir.exists():
-                    for condition_dir in sorted(test_dir.iterdir()):
-                        if condition_dir.is_dir():
-                            condition = condition_dir.name.lower()  # e.g., bent_wire, cable_swap, good, etc.
-                            for file in sorted(condition_dir.iterdir()):
-                                if file.is_file() and file.suffix.lower() in [".jpg", ".jpeg", ".png", ".bmp"]:
-                                    # For test images, label 0 if condition is "good", else 1 indicating anomaly.
-                                    label = 0 if condition == "good" else 1
-                                    self.data.append(file)
-                                    self.labels.append(label)
-                                    gt = (
-                                        ground_truth_dir
-                                        / condition_dir.name
-                                        / f"{os.path.splitext(file.name)[0]}_mask.png"
-                                    )
-                                    self.metadata.append(
-                                        Metadata(
-                                            component=folder_name,
-                                            condition=condition,
-                                            description=f"MVTech {tar_file.name} (test)",
-                                            ground_truth=gt if gt.exists() else None,
-                                        )
-                                    )
+            # Next, check for any extracted folders (without corresponding tar.xz files).
+            for folder in mvtech_root.iterdir():
+                if folder.is_dir() and folder.name not in processed_folders:
+                    # Check if the folder contains expected MVTech subdirectories.
+                    if (folder / "train").exists() or (folder / "test").exists():
+                        print(f"Processing already extracted folder: {folder}")
+                        self._process_mvtech_extracted_folder(folder, source_desc="extracted_folder")
 
             print(f"Loaded {len(self.data)} files from mvtech dataset.")
 
     def __len__(self) -> int:
         """Return the total number of loaded samples."""
         return len(self.data)
+
+    def _process_mvtech_extracted_folder(self, extracted_folder: pathlib.Path, source_desc: str) -> None:
+        """
+        Process an extracted MVTech folder by loading training and test images along with metadata.
+
+        Parameters:
+            extracted_folder: The folder assumed to contain MVTech data.
+            source_desc: A description of the source (e.g., the tar file name or a default string) for the metadata.
+        """
+        folder_name = extracted_folder.name
+
+        # Fix permissions (in case they haven't been set properly)
+        self._fix_permissions(extracted_folder)
+
+        # Process training images: only the 'good' images are used for training.
+        train_good_dir = extracted_folder / "train" / "good"
+        if train_good_dir.exists():
+            for file in sorted(train_good_dir.iterdir()):
+                if file.is_file() and file.suffix.lower() in [".jpg", ".jpeg", ".png", ".bmp"]:
+                    self.data.append(file)
+                    self.labels.append(0)  # Good images are labeled as normal (0)
+                    self.metadata.append(
+                        Metadata(
+                            component=folder_name,
+                            condition="normal",
+                            description=f"MVTech {source_desc} (train)",
+                        )
+                    )
+
+        # Process test images.
+        test_dir = extracted_folder / "test"
+        ground_truth_dir = extracted_folder / "ground_truth"
+        if test_dir.exists():
+            for condition_dir in sorted(test_dir.iterdir()):
+                if condition_dir.is_dir():
+                    condition = condition_dir.name.lower()  # e.g., bent_wire, cable_swap, good, etc.
+                    for file in sorted(condition_dir.iterdir()):
+                        if file.is_file() and file.suffix.lower() in [".jpg", ".jpeg", ".png", ".bmp"]:
+                            # Label: 0 if condition is "good", else 1 (anomaly)
+                            label = 0 if condition == "good" else 1
+                            self.data.append(file)
+                            self.labels.append(label)
+                            # Build corresponding ground truth mask path.
+                            gt = ground_truth_dir / condition_dir.name / f"{os.path.splitext(file.name)[0]}_mask.png"
+                            self.metadata.append(
+                                Metadata(
+                                    component=folder_name,
+                                    condition=condition,
+                                    description=f"MVTech {source_desc} (test)",
+                                    ground_truth=gt if gt.exists() else None,
+                                )
+                            )
 
     def __getitem__(self, idx: int) -> tuple[Image.Image, int, Metadata]:
         """
@@ -197,3 +214,73 @@ class AnomalyDataset:
                 os.chmod(path, 0o777)
             except Exception as e:
                 print(f"Failed to change permissions for {path}: {e}")
+
+    @classmethod
+    def from_existing(
+        cls,
+        *,
+        data: list[pathlib.Path],
+        labels: list[int],
+        metadata: list[Metadata],
+        dataset: Literal["synthetic", "mvtech", "all"],
+        data_root: pathlib.Path,
+    ) -> "AnomalyDataset":
+        """
+        Alternative constructor to create an instance using pre-loaded data.
+        """
+        instance = cls.__new__(cls)  # Bypass __init__
+        instance.data = data
+        instance.labels = labels
+        instance.metadata = metadata
+        instance.dataset = dataset
+        instance.data_root = data_root
+        return instance
+
+    def filter_by_component(self, component: str) -> "AnomalyDataset":
+        """
+        Returns a new instance of AnomalyDataset containing only samples whose metadata match the specified component.
+        The filtering is performed in a case-insensitive manner.
+        """
+        filtered_data = []
+        filtered_labels = []
+        filtered_metadata = []
+        for file_path, label, meta in zip(self.data, self.labels, self.metadata):
+            if meta.component.lower() == component.lower():
+                filtered_data.append(file_path)
+                filtered_labels.append(label)
+                filtered_metadata.append(meta)
+        return AnomalyDataset.from_existing(
+            data=filtered_data,
+            labels=filtered_labels,
+            metadata=filtered_metadata,
+            dataset=self.dataset,
+            data_root=self.data_root,
+        )
+
+    def filter_by(self, filter_func: Callable[[pathlib.Path, Metadata, int], bool]) -> "AnomalyDataset":
+        """
+        Returns a new instance of AnomalyDataset that includes only the samples for which the
+        provided filter function returns True, using the sample's metadata.
+
+        Args:
+            filter_func (Callable[[pathlib.Path, Metadata, int], bool]): A callable that takes a file path,
+            metadata, and label and returns a boolean indicating whether to include the sample.
+
+        Returns:
+            An AnomalyDataset instance filtered according to the callable.
+        """
+        filtered_data = []
+        filtered_labels = []
+        filtered_metadata = []
+        for file_path, label, meta in zip(self.data, self.labels, self.metadata):
+            if filter_func(file_path, meta, label):
+                filtered_data.append(file_path)
+                filtered_labels.append(label)
+                filtered_metadata.append(meta)
+        return AnomalyDataset.from_existing(
+            data=filtered_data,
+            labels=filtered_labels,
+            metadata=filtered_metadata,
+            dataset=self.dataset,
+            data_root=self.data_root,
+        )
