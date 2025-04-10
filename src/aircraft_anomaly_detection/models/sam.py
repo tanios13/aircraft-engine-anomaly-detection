@@ -36,7 +36,7 @@ class SAM:
                 raise ValueError(f"Unable to load image from path: {image_input}")
             image = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         elif isinstance(image_input, Image.Image):
-            image = image_input.convert("RGB")
+            image = np.array(image_input.convert("RGB"))  # type: ignore
         elif isinstance(image_input, np.ndarray):
             # Assume the numpy array is in RGB format.
             image = image_input.copy()
