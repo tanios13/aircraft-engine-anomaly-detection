@@ -1,0 +1,49 @@
+[project]
+name = "aircraft-engine-anomaly-detection"
+version = "0.1.0"
+description = "Anomaly detection in aircraft engines using SOTA zero-shot models"
+readme = "README.md"
+requires-python = "==3.10.*"
+dependencies = [
+    "clip",
+    "matplotlib>=3.10.1",
+    "numpy>=2.2.4",
+    "opencv-python>=4.11.0.86",
+    "pandas>=2.2.3",
+    "pillow>=11.1.0",
+    "pip>=25.0.1",
+    "pydantic>=2.11.3",
+    "segment-anything",
+    "torch>=2.6.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff", "mypy", "ipykernel>=6.29.5"]
+
+[build-system]
+requires = ["setuptools>=64.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "UP", "I"]
+ignore = ["F401", "UP015", "F541"]
+
+[tool.ruff.format]
+quote-style = "double" # Optional: enforce double quotes
+indent-style = "space" # Optional: use spaces instead of tabs
+
+[tool.mypy]
+no_implicit_optional = true
+check_untyped_defs = true
+ignore_missing_imports = true
+
+[tool.uv.sources]
+clip = { git = "https://github.com/openai/CLIP.git" }
+segment-anything = { git = "https://github.com/facebookresearch/segment-anything.git" }
