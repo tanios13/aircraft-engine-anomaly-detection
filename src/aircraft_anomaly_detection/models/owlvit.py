@@ -88,8 +88,10 @@ class OwlViT:
     def plot(
         self,
         image_input: str | Image.Image | np.ndarray,
-        boxes: np.ndarray,
         text_labels: list[str],
+        boxes: np.ndarray,
+        labels_idx: list[int],
+        scores: list[float],
         title: str = "OwlViT Predictions",
     ) -> None:
         """
@@ -102,19 +104,25 @@ class OwlViT:
             title (str): Title for the plot.
         """
         image = self._load_image(image_input)
-        image_array = np.array(image)
-        image_array = cv2.cvtColor(image_array, cv2.COLOR_RGB2BGR)
-
-        for box, label in zip(boxes, text_labels):
-            x0, y0, x1, y1 = box
-            cv2.rectangle(image_array, (x0, y0), (x1, y1), (255, 0, 0), 2)
-            cv2.putText(image_array, str(label), (x0, y0 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
-
-        plt.figure(figsize=(10, 10))
-        plt.imshow(cv2.cvtColor(image_array, cv2.COLOR_BGR2RGB))
+        _, ax = plt.subplots(1, figsize=(6, 6))
+        ax.imshow(image)
+        plt.axis('off')
         plt.title(title)
-        plt.axis("off")
-        plt.show()
+
+        if len(boxes):
+            for idx, box in enumerate(boxes):
+                x1, y1, x2, y2 = [max(0, v) for v in box.tolist()]
+                width, height = x2 - x1, y2 - y1
+
+                rect = patches.Rectangle((x1, y1), width, height, linewidth=2, edgecolor='red', facecolor='none')
+                ax.add_patch(rect)
+
+                label = text_labels[labels_idx[idx]]
+                conf = scores[idx]
+                label_text = f"{label} ({conf:.2f})"
+                ax.text(x1, y1 - 10, label_text, color='red', fontsize=12, backgroundcolor='white')
+        else:
+            print("No defect found")
 
     def _filter_boxes(
         self,
@@ -136,7 +144,7 @@ class OwlViT:
             boxes_pred, scores_pred, labels_pred = zip(*predictions)
             boxes_np = np.stack([b.detach().cpu().numpy().astype(int) for b in boxes_pred], axis=0)
             scores_list = [s.item() for s in scores_pred]
-            labels_list = [str(l.item()) for l in labels_pred]  # Or use a mapping if available.
+            labels_list = [l.item() for l in labels_pred]  # Or use a mapping if available.
         else:
             boxes_np, scores_list, labels_list = np.array([]), [], []
         return boxes_np, scores_list, labels_list
