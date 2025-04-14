@@ -1,10 +1,9 @@
 import google.generativeai as genai
-from PIL import Image
 import numpy as np
+from PIL import Image
 
 
 class GeminiVision:
-
     def __init__(self, api_key: str, model_name: str = "gemini-2.0-flash"):
         """Initializes the GeminiVision class with an API key and model name."""
         genai.configure(api_key=api_key)
@@ -25,13 +24,9 @@ class GeminiVision:
                 img = Image.fromarray(image_input)
                 return img.convert("RGB")
             except ValueError:
-                raise ValueError(
-                    "Numpy array could not be converted to PIL Image. Ensure correct shape and dtype."
-                )
+                raise ValueError("Numpy array could not be converted to PIL Image. Ensure correct shape and dtype.")
         else:
-            raise ValueError(
-                "image_input must be a file path (str), a numpy.ndarray, or a PIL.Image.Image."
-            )
+            raise ValueError("image_input must be a file path (str), a numpy.ndarray, or a PIL.Image.Image.")
 
     def generate_with_image_and_prompt(self, image_input, prompt: str):
         """Sends an image and text prompt to the Gemini model and returns the response."""
