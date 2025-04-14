@@ -29,7 +29,7 @@ class AnomalyDataset:
         The class assumes that the data folder is located two directories up from this file.
         """
         self.dataset = dataset
-        self.data_root = pathlib.Path(__file__).parent.parent.parent.resolve() / "data"
+        self.data_root = pathlib.Path(__file__).parent.parent.parent.parent.resolve() / "data"
         # Initialize empty lists to store file paths, metadata and labels.
         self.data: list[pathlib.Path] = []
         self.metadata: list[Metadata] = []
