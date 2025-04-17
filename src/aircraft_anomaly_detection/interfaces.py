@@ -1,39 +1,31 @@
 import numpy as np
+
+from dataclasses import dataclass, field
+from typing import List, Optional, Any, Union
+from abc import ABC, abstractmethod
 from PIL import Image
-from pydantic import BaseModel, model_validator
 
 
-class Prediction(BaseModel):
-    
+@dataclass
+class Annotation:
     image: Image.Image
-    bboxes : list[np.ndarray] | None
-    labels : list[str] | None
-    scores : list[float] | None
-    masks : list[np.ndarray] | None
-    
-    @model_validator(mode='after')
-    def check_lists_same_length(self):
-        # Create a dictionary of the optional list fields
-        list_fields = {
-            'bboxes': self.bboxes,
-            'labels': self.labels,
-            'scores': self.scores,
-            'masks': self.masks,
-        }
-        # Filter out the fields that are None
-        present_lists = {field: lst for field, lst in list_fields.items() if lst is not None}
-        
-        # If there are any lists provided, check that they all have the same length.
-        if present_lists:
-            # Get the lengths of the provided lists
-            lengths = {field: len(lst) for field, lst in present_lists.items()}
-            # If there's more than one unique length, raise a ValueError.
-            if len(set(lengths.values())) > 1:
-                raise ValueError(
-                    f"All list fields must have the same length, but got lengths: {lengths}"
-                )
-        return self
-    
-    
-    
-    
+    label: Optional[bool]       = None                          # False=undamaged, True=damaged
+    bboxes: List[List[float]]   = field(default_factory=list)
+    scores: List[float]         = field(default_factory=list)
+    bboxes_labels: List[str]    = field(default_factory=list)
+    mask: Optional[np.ndarray]  = None           
+
+    def __post_init__(self):
+        # simple length check
+        if len(self.bboxes) not in (0, len(self.scores), len(self.bboxes_labels)):
+            raise ValueError(
+                f"`bboxes` ({len(self.bboxes)}) must match `scores` ({len(self.scores)}) "
+                f"and `bboxes_labels` ({len(self.bboxes_labels)})"
+            )
+
+class ModelInterface(ABC):
+
+    @abstractmethod
+    def predict(self, input: Any) -> Union[Annotation, List[Annotation]]:
+        """Run a prediction and return results."""
+        pass
