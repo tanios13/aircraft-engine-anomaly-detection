@@ -80,7 +80,7 @@ class OwlViT(ModelInterface):
         if boxes.size and scores:
             ann = Annotation(
                 image=image,
-                label=True,
+                damaged=True,
                 bboxes=boxes.tolist(),
                 scores=scores,
                 bboxes_labels=labels_str,
@@ -89,7 +89,7 @@ class OwlViT(ModelInterface):
         else:
             ann = Annotation(
                 image=image,
-                label=False,
+                damaged=False,
                 bboxes=[],
                 scores=[],
                 bboxes_labels=[],

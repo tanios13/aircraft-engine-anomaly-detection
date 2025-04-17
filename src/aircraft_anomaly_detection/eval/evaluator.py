@@ -1,13 +1,13 @@
 import matplotlib.pyplot as plt
-from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay, roc_auc_score, f1_score
 from typing import List
-from ..interfaces import Prediction
+from ..interfaces import Annotation
 
 
 class Evaluator:
 
-    def __init__(self, predictions: List[Prediction], ground_truth: list) -> None:
-        if len(self.predictions) != len(self.ground_truth):
+    def __init__(self, predictions: List[Annotation], ground_truth: List[Annotation]) -> None:
+        if len(predictions) != len(ground_truth):
             raise ValueError(
                 "The length of predictions and ground truth must be the same"
             )
@@ -21,13 +21,12 @@ class Evaluator:
     def accuracy(self):
         """
         Computes the accuracy of the binary predictions.
-        """
-        self._check_binary_labels()
-        
-        correct = 0
-        for i,pred in enumerate(self.predictions):
-            if pred.binary_label == self.ground_truth[i].binary_label:
-                correct += 1
+        """        
+        self._check_labels()
+        correct = sum(
+            1 for pred, gt in zip(self.predictions, self.ground_truth)
+            if pred.damaged == gt.damaged
+        )
         return correct / len(self.predictions)
 
 
@@ -35,54 +34,53 @@ class Evaluator:
         """
         Computes the F1 score of the binary predictions.
         """
-        self._check_binary_labels()
-
-        tp = 0
-        fp = 0
-        fn = 0
-        for i, pred in enumerate(self.predictions):
-            if pred.binary_label == self.ground_truth[i].binary_label:
-                tp += 1
-            else:
-                fp += 1
-                fn += 1
-        precision = tp / (tp + fp) if (tp + fp) > 0 else 0
-        recall = tp / (tp + fn) if (tp + fn) > 0 else 0
-
-        f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
-        return f1
+        self._check_labels()
+        y_true = [1 if gt.damaged else 0 for gt in self.ground_truth]
+        y_pred = [1 if pred.damaged else 0 for pred in self.predictions]
+        return f1_score(y_true, y_pred)
     
 
     def plot_confusion_matrix(self):
         """
         Plots the confusion matrix of the binary predictions.
         """
-        self._check_binary_labels()
+        self._check_labels()
+        y_true = [1 if gt.damaged else 0 for gt in self.ground_truth]
+        y_pred = [1 if pred.damaged else 0 for pred in self.predictions]
 
-        y_true = [gt.binary_label for gt in self.ground_truth]
-        y_pred = [pred.binary_label for pred in self.predictions]
-
-        cm = confusion_matrix(y_true, y_pred, labels=[True, False])
-        disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=["Positive", "Negative"])
+        cm = confusion_matrix(y_true, y_pred, labels=[0, 1])
+        disp = ConfusionMatrixDisplay(
+            confusion_matrix=cm,
+            display_labels=["Undamaged", "Damaged"]
+        )
         disp.plot(cmap=plt.cm.Blues)
         plt.title("Confusion Matrix")
         plt.grid(False)
         plt.show()
 
 
+
     def auroc(self):
         pass
 
     def eval(self):
-        pass
+        """
+        Compute all metrics and return as a dictionary.
+        """
+        results = {
+            "accuracy": self.accuracy(),
+            "f1_score": self.f1_score()
+        }
+
+        return results
 
 
 #-----------------------------------------------HELPERS--------------------------------------------------#
-    def _check_binary_labels(self):
+    def _check_labels(self) -> None:
         """
-        Check that the binary labels are never None
+        Ensures that all predictions and ground truths have a binary label.
         """
-        if any(pred.binary_label is None for pred in self.predictions):
-            raise ValueError("Binary labels cannot be None")
-        if any(gt.binary_label is None for gt in self.ground_truth):
-            raise ValueError("Binary labels cannot be None")
+        if any(pred.damaged is None for pred in self.predictions):
+            raise ValueError("Prediction label cannot be None")
+        if any(gt.damaged is None for gt in self.ground_truth):
+            raise ValueError("Ground truth label cannot be None")

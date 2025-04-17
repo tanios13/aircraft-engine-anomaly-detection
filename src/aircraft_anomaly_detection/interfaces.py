@@ -11,8 +11,8 @@ class Annotation:
     """
     Represents the output of a model prediction on an image.
     """
-    image: Image.Image
-    label: Optional[bool]       = None                          # False=undamaged, True=damaged
+    image: Image.Image          = None
+    damaged: Optional[bool]     = None                          # False=undamaged, True=damaged
     bboxes: List[List[float]]   = field(default_factory=list)
     scores: List[float]         = field(default_factory=list)
     bboxes_labels: List[str]    = field(default_factory=list)

@@ -10,19 +10,23 @@ from ..interfaces import Annotation, ModelInterface
 class CLIP(ModelInterface):
     def __init__(
         self,
-        undamaged_idxes: List[int],     # e.g. [1] for ["defect", "no defect"]
-        class_names: List[str],         # e.g. ["defect", "no defect"]
+        damaged_idxes: List[int],     # indices of class_names considered "damaged"
+        class_names: List[str],       # e.g. ["defect", "no defect"]
         model_name: str = "ViT-B/32",
         device: str | None = None
     ):
         """
         Compute similarities between image embeddings and text prompts via OpenAI CLIP.
+
+        damaged_idxes: indices in class_names referring to damaged classes.
+        class_names: list of text labels for each class, e.g. ["defect", "no defect"].
         """
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.model, self.preprocess = clip.load(model_name, self.device)
 
         self.class_names = class_names
-        self.undamaged_idxes = undamaged_idxes
+        self.damaged_idxes = damaged_idxes
+        # Prepare text tokens for each class
         texts = [f"a photo of a {c}" for c in class_names]
         self.text_inputs = torch.cat([clip.tokenize(t) for t in texts]).to(self.device)
 
@@ -33,27 +37,23 @@ class CLIP(ModelInterface):
         """
         If `image_input` is a directory path, returns List[Annotation];
         otherwise returns a single Annotation.
-
-        undamaged_idxes: indices of class_names considered "undamaged".
         """
-        # Directory?
+        # Handle directory of images
         if isinstance(image_input, str) and os.path.isdir(image_input):
             anns: List[Annotation] = []
             for fname in sorted(os.listdir(image_input)):
                 if not fname.lower().endswith(("png","jpg","jpeg","bmp")):
                     continue
                 full = os.path.join(image_input, fname)
-                ann = self._predict_single(full, self.undamaged_idxes)
-                anns.append(ann)
+                anns.append(self._predict_single(full))
             return anns
-        else:
-            # Single image
-            return self._predict_single(image_input, self.undamaged_idxes)
+
+        # Single image
+        return self._predict_single(image_input)
 
     def _predict_single(
         self,
-        image_input: str | Image.Image | np.ndarray,
-        undamaged_idxes: List[int]
+        image_input: str | Image.Image | np.ndarray
     ) -> Annotation:
         # --- load into PIL ---
         if isinstance(image_input, str):
@@ -82,22 +82,21 @@ class CLIP(ModelInterface):
         img_feats = img_feats / img_feats.norm(dim=-1, keepdim=True)
         txt_feats = txt_feats / txt_feats.norm(dim=-1, keepdim=True)
 
-        # similarity and top‑k
+        # Compute similarity and get top scores
         sims = (100.0 * img_feats @ txt_feats.T).softmax(dim=-1)
         values, indices = sims[0].topk(len(self.class_names))
 
-        # determine binary label based on highest-class index
+        # Determine damaged flag based on top index
         top_idx = indices[0].item()
-        is_undamaged = top_idx in undamaged_idxes
-        label_flag = False if is_undamaged else True
+        is_damaged = top_idx in self.damaged_idxes
 
-        # build full predictions list
-        scores = [float(v.item()) * 100 for v in values]
+        # Build full predictions list
+        scores = [float(v.item()) * 100 for v in values]  # percentage scores
         labels = [self.class_names[i] for i in indices]
 
         return Annotation(
             image=pil_img,
-            label=label_flag,
+            damaged=is_damaged,
             bboxes=[],
             scores=scores,
             bboxes_labels=labels,
