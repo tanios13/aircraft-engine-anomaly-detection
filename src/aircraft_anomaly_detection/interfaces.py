@@ -8,6 +8,9 @@ from PIL import Image
 
 @dataclass
 class Annotation:
+    """
+    Represents the output of a model prediction on an image.
+    """
     image: Image.Image
     label: Optional[bool]       = None                          # False=undamaged, True=damaged
     bboxes: List[List[float]]   = field(default_factory=list)
@@ -24,7 +27,9 @@ class Annotation:
             )
 
 class ModelInterface(ABC):
-
+    """
+    Interface for all models used in the project.
+    """
     @abstractmethod
     def predict(self, input: Any) -> Union[Annotation, List[Annotation]]:
         """Run a prediction and return results."""
