@@ -14,6 +14,7 @@ class Metadata(BaseModel):
     ground_truth: FilePath | None = None  # Optional ground truth field
     image_path: FilePath | None = None  # Optional image path field
     description: str = Field(default="")  # Optional description field
+    split: str = Field(default="")  # Optional split field (train/test/val)
 
 
 class AnomalyDataset:
@@ -162,6 +163,7 @@ class AnomalyDataset:
                             condition="normal",
                             description=f"MVTech {source_desc} (train)",
                             image_path=file,
+                            split="train",
                         )
                     )
 
@@ -187,6 +189,7 @@ class AnomalyDataset:
                                     description=f"MVTech {source_desc} (test)",
                                     ground_truth=gt if gt.exists() else None,
                                     image_path=file,
+                                    split="test",
                                 )
                             )
 

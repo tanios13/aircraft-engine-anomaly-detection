@@ -60,8 +60,19 @@ class Evaluator:
 
 
 
-    def auroc(self):
-        pass
+    def pixel_auroc(self):
+        """
+        Computes the pixel AUROC score.
+        """
+        self._check_labels()
+        y_true = [gt.mask for gt in self.ground_truth]
+        y_pred = [pred.mask for pred in self.predictions]
+
+        # Flatten the masks and compute AUROC
+        y_true_flat = [item for sublist in y_true for item in sublist]
+        y_pred_flat = [item for sublist in y_pred for item in sublist]
+
+        return roc_auc_score(y_true_flat, y_pred_flat)
 
     def eval(self):
         """
