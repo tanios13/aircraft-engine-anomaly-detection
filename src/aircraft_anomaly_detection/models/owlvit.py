@@ -186,3 +186,33 @@ class OwlViT(ModelInterface):
             boxes_np, scores_list, labels_str = np.array([]), [], []
 
         return boxes_np, scores_list, labels_str
+    
+    def box_to_mask(self, image: Image.Image, boxes: np.ndarray) -> np.ndarray:
+        """
+        Convert bounding boxes to masks.
+
+        Args:
+            image (Image.Image): The input image.
+            boxes (np.ndarray): Array of bounding boxes.
+
+        Returns:
+            np.ndarray: Array of masks.
+        """
+        masks = np.zeros((len(boxes), image.size[1], image.size[0]), dtype=np.uint8)
+        for i, box in enumerate(boxes):
+            x0, y0, x1, y1 = box
+            masks[i, y0:y1, x0:x1] = 1
+        return masks
+    def mask_to_image(self, image: Image.Image, masks: np.ndarray) -> Image.Image:
+        """
+        Convert masks to an image.
+        Args:
+            image (Image.Image): The input image.
+            masks (np.ndarray): Array of masks.
+        Returns:
+            Image.Image: The image with masks applied.
+        """
+        image_np = np.array(image)
+        for mask in masks:
+            image_np[mask == 1] = [255, 0, 0]
+        return Image.fromarray(image_np.astype(np.uint8))
