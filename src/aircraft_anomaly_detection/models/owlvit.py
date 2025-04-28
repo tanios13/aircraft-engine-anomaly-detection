@@ -84,7 +84,7 @@ class OwlViT(ModelInterface):
                 bboxes=boxes.tolist(),
                 scores=scores,
                 bboxes_labels=labels_str,
-                mask=None
+                mask=self.box_to_mask(image, boxes)
             )
         else:
             ann = Annotation(
@@ -96,7 +96,6 @@ class OwlViT(ModelInterface):
                 mask=None
             )
         return ann
-
 
     def plot(
         self,
@@ -132,8 +131,7 @@ class OwlViT(ModelInterface):
         else:
             print("No defect found")
 
-
-#------------------------------------------HELPER FUNCTIONS------------------------------------------#
+    # ------------------------------------------HELPER FUNCTIONS------------------------------------------#
 
     def _load_image(self, image_input: str | Image.Image | np.ndarray) -> Image.Image:
         """
@@ -154,7 +152,6 @@ class OwlViT(ModelInterface):
         else:
             raise ValueError("image_input must be a file path (str), a PIL.Image.Image, or a numpy.ndarray.")
         return image
-
 
     def _filter_boxes(
         self,
@@ -186,33 +183,28 @@ class OwlViT(ModelInterface):
             boxes_np, scores_list, labels_str = np.array([]), [], []
 
         return boxes_np, scores_list, labels_str
-    
+
+
     def box_to_mask(self, image: Image.Image, boxes: np.ndarray) -> np.ndarray:
         """
-        Convert bounding boxes to masks.
+        Convert bounding boxes to a binary mask.
 
         Args:
             image (Image.Image): The input image.
-            boxes (np.ndarray): Array of bounding boxes.
+            boxes (np.ndarray): Array of bounding boxes (x0, y0, x1, y1).
 
         Returns:
-            np.ndarray: Array of masks.
+            np.ndarray: Binary mask with 1s inside boxes, 0 elsewhere.
         """
-        masks = np.zeros((len(boxes), image.size[1], image.size[0]), dtype=np.uint8)
-        for i, box in enumerate(boxes):
-            x0, y0, x1, y1 = box
-            masks[i, y0:y1, x0:x1] = 1
-        return masks
-    def mask_to_image(self, image: Image.Image, masks: np.ndarray) -> Image.Image:
-        """
-        Convert masks to an image.
-        Args:
-            image (Image.Image): The input image.
-            masks (np.ndarray): Array of masks.
-        Returns:
-            Image.Image: The image with masks applied.
-        """
-        image_np = np.array(image)
-        for mask in masks:
-            image_np[mask == 1] = [255, 0, 0]
-        return Image.fromarray(image_np.astype(np.uint8))
+        width, height = image.size
+        mask = np.zeros((height, width), dtype=np.uint8)
+
+        for box in boxes:
+            x0, y0, x1, y1 = map(int, box)  # ensure integers
+            x0 = np.clip(x0, 0, width)
+            x1 = np.clip(x1, 0, width)
+            y0 = np.clip(y0, 0, height)
+            y1 = np.clip(y1, 0, height)
+            mask[y0:y1, x0:x1] = 1
+
+        return mask
