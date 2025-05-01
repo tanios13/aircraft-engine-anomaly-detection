@@ -58,13 +58,27 @@ class Evaluator:
         plt.grid(False)
         plt.show()
 
+    def IoU(self):
+        """
+        Computes the Intersection over Union (IoU) score for the binary masks.
+        """
+        self._check_masks()
+        intersection = 0
+        union = 0
+
+        for pred, gt in zip(self.predictions, self.ground_truth):
+            intersection += (pred.mask & gt.mask).sum()
+            union += (pred.mask | gt.mask).sum()
+
+        return intersection / union if union > 0 else 0.0
+
 
 
     def pixel_auroc(self):
         """
         Computes the pixel AUROC score.
         """
-        self._check_labels()
+        self._check_masks()
         y_true = [gt.mask for gt in self.ground_truth]
         y_pred = [pred.mask for pred in self.predictions]
 
@@ -80,7 +94,9 @@ class Evaluator:
         """
         results = {
             "accuracy": self.accuracy(),
-            "f1_score": self.f1_score()
+            "f1_score": self.f1_score(),
+            "IoU": self.IoU()
+            #"pixel_auroc": self.pixel_auroc()
         }
 
         return results
@@ -95,3 +111,16 @@ class Evaluator:
             raise ValueError("Prediction label cannot be None")
         if any(gt.damaged is None for gt in self.ground_truth):
             raise ValueError("Ground truth label cannot be None")
+        
+    def _check_masks(self) -> None:
+        """
+        Ensures that all predictions and ground truths have a binary mask.
+        """
+        if any(pred.mask is None for pred in self.predictions):
+            raise ValueError("Prediction mask cannot be None")
+        if any(gt.mask is None for gt in self.ground_truth):
+            raise ValueError("Ground truth mask cannot be None")
+        if any(pred.mask.shape != gt.mask.shape for pred, gt in zip(self.predictions, self.ground_truth)):
+            raise ValueError("Prediction and ground truth masks must have the same shape")
+        if any(pred.mask.dtype != gt.mask.dtype for pred, gt in zip(self.predictions, self.ground_truth)):
+            raise ValueError("Prediction and ground truth masks must have the same dtype")
