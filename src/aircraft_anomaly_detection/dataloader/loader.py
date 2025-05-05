@@ -4,8 +4,15 @@ import tarfile
 from collections.abc import Callable
 from typing import Literal
 
-from PIL import Image  # Optional: for loading images
+import numpy as np
+from PIL import Image
+from pycocotools import mask as mask_utils
+from pycocotools.coco import COCO
 from pydantic import BaseModel, Field, FilePath
+
+from ..interfaces import Annotation
+
+DatasetString = Literal["synthetic", "mvtech", "lufthansa"]
 
 
 class Metadata(BaseModel):
@@ -15,15 +22,20 @@ class Metadata(BaseModel):
     image_path: FilePath | None = None  # Optional image path field
     description: str = Field(default="")  # Optional description field
     split: str = Field(default="")  # Optional split field (train/test/val)
+    annotation: Annotation | None = None  # Optional annotations field
+
+    class Config:
+        arbitrary_types_allowed = True
 
 
 class AnomalyDataset:
-    def __init__(self, dataset: Literal["synthetic", "mvtech", "all"]):
+    def __init__(self, dataset: DatasetString | Literal["all"]):
         """
         Initializes the dataset.
 
         The `dataset` parameter indicates which dataset to load:
           - "synthetic": Loads files from the Synthetic_anomaly_dataset folder.
+          - "lufthansa": Loads files from the Lufthansa dataset (assumed structure).
           - "mvtech":   Loads files from the MVTech dataset (assumed structure).
           - "all":      Loads both the synthetic and mvtech datasets.
 
@@ -37,11 +49,15 @@ class AnomalyDataset:
         self.labels: list[int] = []
 
         # Load the relevant dataset(s) based on the user input.
-        if self.dataset == "all":
-            self._load("synthetic")
-            self._load("mvtech")
+        if dataset == "all":
+            for d in ("synthetic", "mvtech", "lufthansa"):
+                self._load(d)
         else:
-            self._load(self.dataset)
+            self._load(dataset)
+
+    def __len__(self) -> int:
+        """Return the total number of loaded samples."""
+        return len(self.data)
 
     def __repr__(self) -> str:
         """Return a string representation of the dataset."""
@@ -49,93 +65,147 @@ class AnomalyDataset:
         return f"AnomalyDataset(dataset={self.dataset}, num_samples={len(self.data)}) \n \
                 components={self.components})"
 
-    def _load(self, dataset: Literal["synthetic", "mvtech"]) -> None:
-        """
-        Loads the files for the specified dataset.
-
-        For the synthetic dataset, it expects a folder structure as:
-            Synthetic_anomaly_dataset/
-                <component>/
-                    normal/
-                    scratched/
-
-        Each component represents a machine part (e.g., oil_pump, pistons, etc.). For each image,
-        we store the file path, assign a label (0 for normal, 1 for scratched), and record its metadata.
-
-        For "mvtech", you can implement the appropriate logic based on the dataset's structure.
-        """
-        if dataset not in ["synthetic", "mvtech"]:
-            raise ValueError(f"Dataset {dataset} is not supported. Choose 'synthetic' or 'mvtech'.")
-
+    def _load(self, dataset: str) -> None:  # noqa: C901
         if dataset == "synthetic":
-            synthetic_root = self.data_root / "Synthetic_anomaly_dataset"
-            if not synthetic_root.exists():
-                raise ValueError(f"Synthetic dataset directory {synthetic_root} does not exist.")
-
-            # Iterate over each component folder (oil_pump, pistons, etc.)
-            for component_dir in synthetic_root.iterdir():
-                if component_dir.is_dir():
-                    # Iterate over each condition folder inside the component folder.
-                    for condition_dir in component_dir.iterdir():
-                        if condition_dir.is_dir():
-                            condition = condition_dir.name.lower()  # Expected to be "normal" or "scratched"
-                            if condition not in ["normal", "scratched"]:
-                                print(f"Skipping unrecognized condition folder: {condition_dir}")
-                                continue
-                            # Iterate through each file in the condition directory.
-                            for file_path in condition_dir.iterdir():
-                                self.data.append(file_path)
-                                # Assign a label: 0 for "normal", 1 for "scratched"
-                                label = 0 if condition == "normal" else 1
-                                self.labels.append(label)
-                                # Save metadata for this sample.
-                                self.metadata.append(Metadata(component=component_dir.name, condition=condition))
-            print(f"Loaded {len(self.data)} files from synthetic dataset at {synthetic_root}")
+            self._load_synthetic()
         elif dataset == "mvtech":
-            mvtech_root = self.data_root / "mvtech"
-            if not mvtech_root.exists():
-                raise ValueError(f"MVTech folder {mvtech_root} does not exist.")
+            self._load_mvtech()
+        elif dataset == "lufthansa":
+            self._load_lufthansa()
+        else:
+            raise ValueError(f"Dataset {dataset} is not supported.")
 
-            processed_folders = set()
+    def _load_lufthansa(self) -> None:
+        luf_root = self.data_root / "lufthansa"
+        ann_file = luf_root / "_annotations.coco.json"
+        if not ann_file.exists():
+            raise ValueError(f"COCO annotations file {ann_file} not found.")
 
-            # First, check for tar.xz files.
-            mvtech_tar_files = list(mvtech_root.glob("*.tar.xz"))
-            for tar_file in sorted(mvtech_tar_files):
-                if not tar_file.is_file():
-                    continue
-                # Determine the expected extracted folder name.
-                folder_name = tar_file.name[:-7] if tar_file.name.endswith(".tar.xz") else tar_file.stem
-                processed_folders.add(folder_name)
-                extracted_folder = mvtech_root / folder_name
+        coco = COCO(str(ann_file))
+        for img_id in coco.getImgIds():
+            info = coco.loadImgs(img_id)[0]
+            img_path = luf_root / info["file_name"]
+            if not img_path.exists():
+                print(f"Missing image {img_path}; skipping")
+                continue
 
-                if not extracted_folder.exists():
-                    print(f"Extracting {tar_file} into {extracted_folder} ...")
-                    try:
-                        with tarfile.open(tar_file, "r:xz") as tf:
-                            tf.extractall(path=mvtech_root)
-                        # Fix permissions on the extracted files.
-                        self._fix_permissions(extracted_folder)
-                    except Exception as e:
-                        print(f"Error extracting {tar_file}: {e}")
-                        continue
+            h, w = info["height"], info["width"]
+            mask_total = np.zeros((h, w), dtype=np.uint8)
+            bboxes: list[list[float]] = []
+            scores: list[float] = []
+            labels: list[str] = []
+
+            for ann in coco.loadAnns(coco.getAnnIds(imgIds=[img_id])):
+                # bbox
+                x, y, bw, bh = ann["bbox"]
+                bboxes.append([x, y, x + bw, y + bh])
+                scores.append(float(ann.get("score", 1.0)))
+                labels.append(coco.loadCats(ann["category_id"])[0]["name"])
+
+                # mask from polygon / RLE / bbox fallback
+                seg = ann.get("segmentation")
+                if seg:
+                    if isinstance(seg, list):
+                        rles = mask_utils.frPyObjects(seg, h, w)
+                        rle = mask_utils.merge(rles)
+                        m = mask_utils.decode(rle)
+                    else:
+                        m = mask_utils.decode(seg)
+                    mask_total |= m
                 else:
-                    print(f"Using existing extracted folder: {extracted_folder}")
+                    x0, y0, x1, y1 = map(int, [x, y, x + bw, y + bh])
+                    mask_total[y0:y1, x0:x1] = 1
+
+            annotation = Annotation(
+                image=None,
+                damaged=True,
+                bboxes=bboxes,
+                scores=scores,
+                bboxes_labels=labels,
+                mask=mask_total if mask_total.any() else None,
+            )
+
+            self.data.append(img_path)
+            self.labels.append(1)
+            self.metadata.append(
+                Metadata(
+                    component="rotors",
+                    condition="scratched_or_dented",
+                    image_path=img_path,
+                    annotation=annotation,
+                    split="test",
+                    description="Lufthansa COCO dataset (masks generated)",
+                )
+            )
+        print(f"Loaded {len(self.data)} Lufthansa images.")
+
+    def _load_synthetic(self) -> None:
+        root = self.data_root / "Synthetic_anomaly_dataset"
+        if not root.exists():
+            raise ValueError(f"Synthetic dataset directory {root} does not exist.")
+        for comp_dir in root.iterdir():
+            if not comp_dir.is_dir():
+                continue
+            for cond_dir in comp_dir.iterdir():
+                if not cond_dir.is_dir():
+                    continue
+                cond = cond_dir.name.lower()
+                if cond not in ("normal", "scratched"):
+                    continue
+                for img_fp in cond_dir.iterdir():
+                    if not img_fp.is_file():
+                        continue
+                    self.data.append(img_fp)
+                    self.labels.append(0 if cond == "normal" else 1)
+                    self.metadata.append(
+                        Metadata(
+                            component=comp_dir.name,
+                            condition=cond,
+                            image_path=img_fp,
+                        )
+                    )
+        print(f"Loaded {len(self.data)} synthetic images.")
+
+    def _load_mvtech(self) -> None:
+        mvtech_root = self.data_root / "mvtech"
+        if not mvtech_root.exists():
+            raise ValueError(f"MVTech folder {mvtech_root} does not exist.")
+
+        processed_folders = set()
+
+        # First, check for tar.xz files.
+        mvtech_tar_files = list(mvtech_root.glob("*.tar.xz"))
+        for tar_file in sorted(mvtech_tar_files):
+            if not tar_file.is_file():
+                continue
+            folder_name = tar_file.name[:-7] if tar_file.name.endswith(".tar.xz") else tar_file.stem
+            processed_folders.add(folder_name)
+            extracted_folder = mvtech_root / folder_name
+
+            if not extracted_folder.exists():
+                print(f"Extracting {tar_file} into {extracted_folder} ...")
+                try:
+                    with tarfile.open(tar_file, "r:xz") as tf:
+                        tf.extractall(path=mvtech_root)
+                    # Fix permissions on the extracted files.
                     self._fix_permissions(extracted_folder)
-                self._process_mvtech_extracted_folder(extracted_folder, source_desc=tar_file.name)
+                except Exception as e:
+                    print(f"Error extracting {tar_file}: {e}")
+                    continue
+            else:
+                print(f"Using existing extracted folder: {extracted_folder}")
+                self._fix_permissions(extracted_folder)
+            self._process_mvtech_extracted_folder(extracted_folder, source_desc=tar_file.name)
 
-            # Next, check for any extracted folders (without corresponding tar.xz files).
-            for folder in mvtech_root.iterdir():
-                if folder.is_dir() and folder.name not in processed_folders:
-                    # Check if the folder contains expected MVTech subdirectories.
-                    if (folder / "train").exists() or (folder / "test").exists():
-                        print(f"Processing already extracted folder: {folder}")
-                        self._process_mvtech_extracted_folder(folder, source_desc="extracted_folder")
+        # Next, check for any extracted folders (without corresponding tar.xz files).
+        for folder in mvtech_root.iterdir():
+            if folder.is_dir() and folder.name not in processed_folders:
+                # Check if the folder contains expected MVTech subdirectories.
+                if (folder / "train").exists() or (folder / "test").exists():
+                    print(f"Processing already extracted folder: {folder}")
+                    self._process_mvtech_extracted_folder(folder, source_desc="extracted_folder")
 
-            print(f"Loaded {len(self.data)} files from mvtech dataset.")
-
-    def __len__(self) -> int:
-        """Return the total number of loaded samples."""
-        return len(self.data)
+        print(f"Loaded {len(self.data)} files from mvtech dataset.")
 
     def _process_mvtech_extracted_folder(self, extracted_folder: pathlib.Path, source_desc: str) -> None:
         """
@@ -202,7 +272,6 @@ class AnomalyDataset:
         label = self.labels[idx]
         metadata = self.metadata[idx]
 
-        # Optionally load the image (or file) here
         try:
             # This will open an image file using PIL. Adjust accordingly if working with different data.
             image = Image.open(file_path).convert("RGB")
@@ -228,7 +297,7 @@ class AnomalyDataset:
         data: list[pathlib.Path],
         labels: list[int],
         metadata: list[Metadata],
-        dataset: Literal["synthetic", "mvtech", "all"],
+        dataset: DatasetString | Literal["all"],
         data_root: pathlib.Path,
     ) -> "AnomalyDataset":
         """

@@ -1,12 +1,14 @@
+from os import PathLike
+
 import matplotlib.patches as patches
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-
-from os import PathLike
-from transformers import OwlViTForObjectDetection, OwlViTProcessor
-from ..interfaces import Annotation, ModelInterface
 from PIL import Image
+from transformers import OwlViTForObjectDetection, OwlViTProcessor
+
+from ..interfaces import Annotation, ModelInterface
+
 
 class OwlViT(ModelInterface):
     def __init__(
@@ -25,17 +27,19 @@ class OwlViT(ModelInterface):
 
     def predict(
         self,
-        image_input: str | Image.Image | np.ndarray,
-        text_prompts: list[list[str]],
+        input_image: str | Image.Image | np.ndarray,
+        *,
+        text_prompts: list[list[str]] = [["defect", "no defect"]],
         undamaged_idxes: list[int] = [],
         threshold: float = 0.01,
         top_k: int = 2,
+        **kwargs,
     ) -> Annotation:
         """
         Run OwlViT on an image and return filtered boxes, scores, and labels.
 
         Args:
-            image_input (Union[str, Image.Image, np.ndarray]): Image file path, a PIL image, or a numpy array.
+            input_image (Union[str, Image.Image, np.ndarray]): Image file path, a PIL image, or a numpy array.
             text_prompts (List[List[str]]): A list containing a single list of class descriptions, e.g., [["defect", "no defect"]].
             undamaged_idxes (List[int], optional): List of label indices to filter out. Defaults to [].
             threshold (float, optional): Confidence threshold for post-processing. Defaults to 0.01.
@@ -52,7 +56,7 @@ class OwlViT(ModelInterface):
         Run prediction on an image and return results as an Annotation.
 
         Args:
-            image_input (Union[str, Image.Image, np.ndarray]): Image file path, PIL Image, or numpy array.
+            input_image (Union[str, Image.Image, np.ndarray]): Image file path, PIL Image, or numpy array.
             text_prompts (List[List[str]]): Class descriptions, e.g., [["defect", "no defect"]].
             undamaged_idxes (List[int], optional): Label indices to filter out (e.g., no-defect classes).
             threshold (float, optional): Confidence threshold for detection.
@@ -61,7 +65,7 @@ class OwlViT(ModelInterface):
         Returns:
             Annotation: label=True with bboxes, scores, bboxes_labels if defects found; otherwise label=False and empty lists.
         """
-        image = self._load_image(image_input)
+        image = self._load_image(input_image)
         inputs = self.processor(text=text_prompts, images=image, return_tensors="pt").to(self.device)
         outputs = self.model(**inputs)
 
@@ -69,7 +73,7 @@ class OwlViT(ModelInterface):
         results = self.processor.post_process_grounded_object_detection(
             outputs=outputs,
             threshold=threshold,
-            target_sizes=target_sizes
+            target_sizes=target_sizes,
         )
         result = results[0]
 
@@ -84,17 +88,10 @@ class OwlViT(ModelInterface):
                 bboxes=boxes.tolist(),
                 scores=scores,
                 bboxes_labels=labels_str,
-                mask=self.box_to_mask(image, boxes)
+                mask=self.box_to_mask(image, boxes),
             )
         else:
-            ann = Annotation(
-                image=image,
-                damaged=False,
-                bboxes=[],
-                scores=[],
-                bboxes_labels=[],
-                mask=None
-            )
+            ann = Annotation(image=image, damaged=False, bboxes=[], scores=[], bboxes_labels=[], mask=None)
         return ann
 
     def plot(
@@ -112,7 +109,7 @@ class OwlViT(ModelInterface):
 
         _, ax = plt.subplots(1, figsize=(6, 6))
         ax.imshow(image)
-        plt.axis('off')
+        plt.axis("off")
         plt.title(title)
 
         if len(boxes):
@@ -120,37 +117,34 @@ class OwlViT(ModelInterface):
                 x1, y1, x2, y2 = [max(0, v) for v in box.tolist()]
                 width, height = x2 - x1, y2 - y1
 
-                rect = patches.Rectangle((x1, y1), width, height, linewidth=2,
-                                         edgecolor='red', facecolor='none')
+                rect = patches.Rectangle((x1, y1), width, height, linewidth=2, edgecolor="red", facecolor="none")
                 ax.add_patch(rect)
 
                 label_text = f"{labels[idx]} ({scores[idx]:.2f})"
-                ax.text(x1, y1 - 10, label_text,
-                        color='red', fontsize=12,
-                        backgroundcolor='white')
+                ax.text(x1, y1 - 10, label_text, color="red", fontsize=12, backgroundcolor="white")
         else:
             print("No defect found")
 
     # ------------------------------------------HELPER FUNCTIONS------------------------------------------#
 
-    def _load_image(self, image_input: str | Image.Image | np.ndarray) -> Image.Image:
+    def _load_image(self, input_image: str | Image.Image | np.ndarray) -> Image.Image:
         """
         Load an image from a file path, a numpy array, or a PIL image, and return a PIL Image in RGB.
 
         Args:
-            image_input (Union[str, Image.Image, np.ndarray]): Image file path, numpy array, or PIL Image.
+            input_image (Union[str, Image.Image, np.ndarray]): Image file path, numpy array, or PIL Image.
 
         Returns:
             Image.Image: Loaded image in RGB mode.
         """
-        if isinstance(image_input, str):
-            image = Image.open(image_input).convert("RGB")
-        elif isinstance(image_input, Image.Image):
-            image = image_input.convert("RGB")
-        elif isinstance(image_input, np.ndarray):
-            image = Image.fromarray(np.uint8(image_input)).convert("RGB")
+        if isinstance(input_image, str):
+            image = Image.open(input_image).convert("RGB")
+        elif isinstance(input_image, Image.Image):
+            image = input_image.convert("RGB")
+        elif isinstance(input_image, np.ndarray):
+            image = Image.fromarray(np.uint8(input_image)).convert("RGB")
         else:
-            raise ValueError("image_input must be a file path (str), a PIL.Image.Image, or a numpy.ndarray.")
+            raise ValueError("input_image must be a file path (str), a PIL.Image.Image, or a numpy.ndarray.")
         return image
 
     def _filter_boxes(
@@ -173,17 +167,13 @@ class OwlViT(ModelInterface):
 
         if preds:
             boxes_pred, scores_pred, labels_pred = zip(*preds)
-            boxes_np = np.stack(
-                [b.detach().cpu().numpy().astype(int) for b in boxes_pred],
-                axis=0
-            )
+            boxes_np = np.stack([b.detach().cpu().numpy().astype(int) for b in boxes_pred], axis=0)
             scores_list = [float(s) for s in scores_pred]
             labels_str = [text_prompts[int(l)] for l in labels_pred]
         else:
             boxes_np, scores_list, labels_str = np.array([]), [], []
 
         return boxes_np, scores_list, labels_str
-
 
     def box_to_mask(self, image: Image.Image, boxes: np.ndarray) -> np.ndarray:
         """

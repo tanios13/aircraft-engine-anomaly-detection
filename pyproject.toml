@@ -17,6 +17,8 @@ dependencies = [
     "torch>=2.6.0",
     "google-generativeai>=0.2.0",
     "transformers[torch]>=4.51.3",
+    "tqdm>=4.67.1",
+    "pycocotools>=2.0.8",
 ]
 
 [project.optional-dependencies]
