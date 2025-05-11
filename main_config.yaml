@@ -1,0 +1,4 @@
+input: lufthansa
+model_name: fasterrcnn
+model_path: data/weights/fasterrcnn_scratch_detector.pth
+output_path: data/results/fasterrcnn/

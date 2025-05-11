@@ -84,7 +84,7 @@ class FasterRCNN(ModelInterface):
                 bboxes=[],
                 scores=[],
                 bboxes_labels=[],
-                mask=None
+                mask=self.box_to_mask(image, boxes_np)
             )
         return ann
 
@@ -169,6 +169,10 @@ class FasterRCNN(ModelInterface):
         """
         width, height = image.size
         mask = np.zeros((height, width), dtype=np.uint8)
+
+        if boxes.size == 0:
+            return mask
+        
         for box in boxes:
             x0, y0, x1, y1 = map(int, box)
             x0, x1 = np.clip([x0, x1], 0, width)
