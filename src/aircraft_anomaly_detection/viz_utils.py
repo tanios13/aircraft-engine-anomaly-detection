@@ -155,6 +155,7 @@ def draw_annotation(
     ax=None,
     alpha: float = 0.4,
     linewidth: float = 2.0,
+    save_path: str | Path | None = None,
 ):
     """
     Overlay an Annotation on a PIL image.
@@ -171,7 +172,9 @@ def draw_annotation(
     linewidth    : box edge width
     """
     if ax is None:
-        _, ax = plt.subplots(figsize=(6, 6))
+        fig, ax = plt.subplots(figsize=(6, 6))
+    else:
+        fig = ax.figure
     ax.imshow(image)
     ax.axis("off")
 
@@ -205,5 +208,9 @@ def draw_annotation(
             alpha=alpha,
             cmap="RdBu",
         )
+
+    if save_path:
+        fig.savefig(save_path, bbox_inches="tight")
+        plt.close(fig)
 
     return ax

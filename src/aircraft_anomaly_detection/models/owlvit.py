@@ -29,29 +29,12 @@ class OwlViT(ModelInterface):
         self,
         input_image: str | Image.Image | np.ndarray,
         *,
-        text_prompts: list[list[str]] = [["defect", "no defect"]],
-        undamaged_idxes: list[int] = [],
+        text_prompts: list[list[str]] = [["a clean, undamaged metal surface", "a close-up image of a metal scratch"]],
+        undamaged_idxes: list[int] = [0],
         threshold: float = 0.01,
         top_k: int = 2,
         **kwargs,
     ) -> Annotation:
-        """
-        Run OwlViT on an image and return filtered boxes, scores, and labels.
-
-        Args:
-            input_image (Union[str, Image.Image, np.ndarray]): Image file path, a PIL image, or a numpy array.
-            text_prompts (List[List[str]]): A list containing a single list of class descriptions, e.g., [["defect", "no defect"]].
-            undamaged_idxes (List[int], optional): List of label indices to filter out. Defaults to [].
-            threshold (float, optional): Confidence threshold for post-processing. Defaults to 0.01.
-            top_k (int, optional): Number of top predictions to keep. Defaults to 2.
-
-        Returns:
-            Tuple containing:
-                - image (Image.Image): The loaded PIL image (RGB).
-                - boxes (np.ndarray): Array of filtered bounding boxes (each as [x0, y0, x1, y1]).
-                - scores (List[float]): Confidence scores for each box.
-                - labels (List[str]): Detected labels for each box.
-        """
         """
         Run prediction on an image and return results as an Annotation.
 
@@ -91,7 +74,7 @@ class OwlViT(ModelInterface):
                 mask=self.box_to_mask(image, boxes),
             )
         else:
-            ann = Annotation(image=image, damaged=False, bboxes=[], scores=[], bboxes_labels=[], mask=None)
+            ann = Annotation(image=image, damaged=False, bboxes=[], scores=[], bboxes_labels=[], mask=self.box_to_mask(image, boxes))
         return ann
 
     def plot(
@@ -169,7 +152,7 @@ class OwlViT(ModelInterface):
             boxes_pred, scores_pred, labels_pred = zip(*preds)
             boxes_np = np.stack([b.detach().cpu().numpy().astype(int) for b in boxes_pred], axis=0)
             scores_list = [float(s) for s in scores_pred]
-            labels_str = [text_prompts[int(l)] for l in labels_pred]
+            labels_str = [text_prompts[0][int(l)] for l in labels_pred]
         else:
             boxes_np, scores_list, labels_str = np.array([]), [], []
 
@@ -188,6 +171,9 @@ class OwlViT(ModelInterface):
         """
         width, height = image.size
         mask = np.zeros((height, width), dtype=np.uint8)
+
+        if boxes.size == 0:
+            return mask
 
         for box in boxes:
             x0, y0, x1, y1 = map(int, box)  # ensure integers
