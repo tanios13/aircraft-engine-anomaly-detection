@@ -39,10 +39,9 @@ class Evaluator:
         y_pred = [1 if pred.damaged else 0 for pred in self.predictions]
         return f1_score(y_true, y_pred)
     
-
-    def plot_confusion_matrix(self):
+    def plot_confusion_matrix(self, save_path: str = None):
         """
-        Plots the confusion matrix of the binary predictions.
+        Plots the confusion matrix of the binary predictions and optionally saves it to a file.
         """
         self._check_labels()
         y_true = [1 if gt.damaged else 0 for gt in self.ground_truth]
@@ -56,7 +55,12 @@ class Evaluator:
         disp.plot(cmap=plt.cm.Blues)
         plt.title("Confusion Matrix")
         plt.grid(False)
-        plt.show()
+        
+        if save_path:
+            plt.savefig(save_path)  # Save the plot to the file
+            print(f"Confusion matrix saved to {save_path}")
+        else:
+            plt.show()  # Show the plot if no save_path is provided
 
     def IoU(self):
         """
@@ -71,8 +75,6 @@ class Evaluator:
             union += (pred.mask | gt.mask).sum()
 
         return intersection / union if union > 0 else 0.0
-
-
 
     def pixel_auroc(self):
         """
@@ -92,12 +94,22 @@ class Evaluator:
         """
         Compute all metrics and return as a dictionary.
         """
-        results = {
-            "accuracy": self.accuracy(),
-            "f1_score": self.f1_score(),
-            "IoU": self.IoU()
-            #"pixel_auroc": self.pixel_auroc()
-        }
+        results = {}
+        try:
+            results["accuracy"] = [self.accuracy()]
+            results["f1_score"] = [self.f1_score()]
+        except Exception as e:
+            print(f"Error in accuracy and f1 evaluation: {e}")
+        
+        try:
+            results["pixel_auroc"] = [self.pixel_auroc()]
+        except Exception as e:
+            print(f"Error in pixel AUROC calculation: {e}")
+
+        try:
+            results["IoU"] = [self.IoU()]
+        except Exception as e:
+            print(f"Error in IoU calculation: {e}")
 
         return results
 

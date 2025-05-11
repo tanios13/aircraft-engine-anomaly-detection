@@ -82,6 +82,8 @@ class AnomalyDataset:
             raise ValueError(f"COCO annotations file {ann_file} not found.")
 
         coco = COCO(str(ann_file))
+        cat_id2name = {c["id"]: c["name"] for c in coco.dataset["categories"]}
+
         for img_id in coco.getImgIds():
             info = coco.loadImgs(img_id)[0]
             img_path = luf_root / info["file_name"]
@@ -91,18 +93,25 @@ class AnomalyDataset:
 
             h, w = info["height"], info["width"]
             mask_total = np.zeros((h, w), dtype=np.uint8)
-            bboxes: list[list[float]] = []
-            scores: list[float] = []
-            labels: list[str] = []
+            bboxes, scores, labels_box = [], [], []
 
+            # ── gather annotations for this image ────────────────────────────────────
             for ann in coco.loadAnns(coco.getAnnIds(imgIds=[img_id])):
+                cid = ann["category_id"]
+
+                # skip the old ‘scratches‑dents’ umbrella class (id 0)
+                if cid == 0:
+                    continue
+
+                cat_name = cat_id2name[cid]  # e.g. 1 → "chip", 2 → "dent"
+
                 # bbox
                 x, y, bw, bh = ann["bbox"]
                 bboxes.append([x, y, x + bw, y + bh])
                 scores.append(float(ann.get("score", 1.0)))
-                labels.append(coco.loadCats(ann["category_id"])[0]["name"])
+                labels_box.append(cat_name)
 
-                # mask from polygon / RLE / bbox fallback
+                # mask (polygon / RLE / bbox fallback)
                 seg = ann.get("segmentation")
                 if seg:
                     if isinstance(seg, list):
@@ -116,28 +125,36 @@ class AnomalyDataset:
                     x0, y0, x1, y1 = map(int, [x, y, x + bw, y + bh])
                     mask_total[y0:y1, x0:x1] = 1
 
+            # ── image‑level metadata ─────────────────────────────────────────────────
+            is_damaged = bool(bboxes)  # True if any bbox kept
+            img_condition = "damaged" if is_damaged else "normal"
+
             annotation = Annotation(
                 image=None,
-                damaged=True,
+                damaged=is_damaged,
                 bboxes=bboxes,
                 scores=scores,
-                bboxes_labels=labels,
-                mask=mask_total if mask_total.any() else None,
+                bboxes_labels=labels_box,
+                mask=mask_total,
             )
 
             self.data.append(img_path)
-            self.labels.append(1)
+            self.labels.append(1 if is_damaged else 0)  # 1 = damaged, 0 = normal
             self.metadata.append(
                 Metadata(
                     component="rotors",
-                    condition="scratched_or_dented",
+                    condition=img_condition,
                     image_path=img_path,
                     annotation=annotation,
                     split="test",
-                    description="Lufthansa COCO dataset (masks generated)",
+                    description=("Lufthansa COCO dataset ('normal' class, per-anomaly categories by ID)"),
                 )
             )
-        print(f"Loaded {len(self.data)} Lufthansa images.")
+
+        print(
+            f"Loaded {len(self.data)} Lufthansa images "
+            f"({sum(self.labels)} damaged / {len(self.labels) - sum(self.labels)} normal)."
+        )
 
     def _load_synthetic(self) -> None:
         root = self.data_root / "Synthetic_anomaly_dataset"

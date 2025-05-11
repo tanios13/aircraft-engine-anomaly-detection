@@ -4,6 +4,7 @@ import random
 from collections.abc import Iterable
 from os import PathLike
 from pathlib import Path
+from matplotlib.patches import Patch
 
 import matplotlib.patches as mpatches
 import matplotlib.path as mpath
@@ -155,6 +156,7 @@ def draw_annotation(
     ax=None,
     alpha: float = 0.4,
     linewidth: float = 2.0,
+    save_path: str | Path | None = None,
 ):
     """
     Overlay an Annotation on a PIL image.
@@ -171,7 +173,9 @@ def draw_annotation(
     linewidth    : box edge width
     """
     if ax is None:
-        _, ax = plt.subplots(figsize=(6, 6))
+        fig, ax = plt.subplots(figsize=(6, 6))
+    else:
+        fig = ax.figure
     ax.imshow(image)
     ax.axis("off")
 
@@ -206,4 +210,61 @@ def draw_annotation(
             cmap="RdBu",
         )
 
+    if save_path:
+        fig.savefig(save_path, bbox_inches="tight")
+        plt.close(fig)
+
     return ax
+
+
+def visualize_mask_overlap_with_image(
+    image: Image.Image,
+    mask1: np.ndarray,
+    mask2: np.ndarray,
+    title: str = "Mask Overlap",
+    save_path: str = None
+):
+    """
+    Show a PIL image with overlaid ground truth and predicted masks,
+    and display a legend explaining the colors.
+    """
+    image_np = np.array(image.convert("RGB")) / 255.0  # Normalize to [0, 1]
+    height, width = mask1.shape
+
+    # Create overlay
+    overlay = np.zeros((height, width, 3), dtype=np.float32)
+
+    # Color codes
+    red = np.array([1, 0, 0])  # Pred only
+    green = np.array([0, 1, 0])  # Ground truth only
+    yellow = np.array([1, 1, 0])  # Intersection
+
+    # Apply colors
+    only_pred = (mask1 == 0) & (mask2 == 1)
+    only_gt = (mask1 == 1) & (mask2 == 0)
+    intersection = (mask1 == 1) & (mask2 == 1)
+
+    overlay[only_pred] = red
+    overlay[only_gt] = green
+    overlay[intersection] = yellow
+
+    # Plot
+    plt.figure(figsize=(8, 8))
+    plt.imshow(image_np)
+    plt.imshow(overlay, alpha=0.4)
+    plt.title(title)
+    plt.axis("off")
+
+    # Legend
+    legend_patches = [
+        Patch(color="red", label="Predicted only"),
+        Patch(color="green", label="Ground truth only"),
+        Patch(color="yellow", label="Intersection"),
+    ]
+    plt.legend(handles=legend_patches, loc="upper right")
+
+    if save_path:
+        plt.savefig(save_path, bbox_inches="tight")
+        plt.close()
+    else:
+        plt.show()
