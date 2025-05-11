@@ -135,7 +135,7 @@ class AnomalyDataset:
                 bboxes=bboxes,
                 scores=scores,
                 bboxes_labels=labels_box,
-                mask=mask_total if mask_total.any() else None,
+                mask=mask_total,
             )
 
             self.data.append(img_path)

@@ -1,4 +1,4 @@
 input: lufthansa
-model_name: fasterrcnn
-model_path: data/weights/fasterrcnn_scratch_detector.pth
-output_path: data/results/fasterrcnn/
+model_name: owlvit
+model_path: google/owlvit-base-patch32
+output_path: data/results/owlvit/
