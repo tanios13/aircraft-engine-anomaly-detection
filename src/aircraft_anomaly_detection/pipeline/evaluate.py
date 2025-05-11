@@ -4,7 +4,7 @@ import pandas as pd
 from aircraft_anomaly_detection.interfaces import ModelInterface
 from aircraft_anomaly_detection.dataloader.loader import AnomalyDataset
 from aircraft_anomaly_detection.eval.evaluator import Evaluator
-from aircraft_anomaly_detection.viz_utils import draw_annotation
+from aircraft_anomaly_detection.viz_utils import visualize_mask_overlap_with_image
 
 
 def evaluate(dataset: AnomalyDataset, model: ModelInterface, output_dir: str = None):
@@ -27,9 +27,10 @@ def evaluate(dataset: AnomalyDataset, model: ModelInterface, output_dir: str = N
         pred_annotation = model.predict(image)
         pred_annotation_list.append(pred_annotation)
 
-        draw_annotation(
+        visualize_mask_overlap_with_image(
             image,
-            pred_annotation,
+            metadata.annotation.mask,
+            pred_annotation.mask,
             save_path=output_dir + f"image_{i}.png",
         )
 
