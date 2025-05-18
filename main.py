@@ -1,14 +1,16 @@
 import argparse
 import os
-import yaml
 from pathlib import Path
 from types import SimpleNamespace
 from typing import get_args
 
-from aircraft_anomaly_detection.dataloader.loader import DatasetString, AnomalyDataset
-from aircraft_anomaly_detection.pipeline import evaluate, infer
-from aircraft_anomaly_detection.models.owlvit import OwlViT
+import yaml
+
+from aircraft_anomaly_detection.dataloader.loader import (AnomalyDataset,
+                                                          DatasetString)
 from aircraft_anomaly_detection.models.faster_rcnn import FasterRCNN
+from aircraft_anomaly_detection.models.owlvit import OwlViT
+from aircraft_anomaly_detection.pipeline import evaluate, infer
 
 
 def main(args):
@@ -22,7 +24,8 @@ def main(args):
 
     # Parse dataset
     if args.input.lower() in get_args(DatasetString) or args.input.lower() == "all":
-        evaluate(AnomalyDataset(args.input.lower()), model, args.output_path)
+        category = None if not hasattr(args, "category") else args.category
+        evaluate(AnomalyDataset(args.input.lower(), category), model, args.output_path)
     elif os.path.isfile(args.input):
         infer(Path(args.input), model, args.output_path)
     else:

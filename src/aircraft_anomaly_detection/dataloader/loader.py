@@ -29,7 +29,7 @@ class Metadata(BaseModel):
 
 
 class AnomalyDataset:
-    def __init__(self, dataset: DatasetString | Literal["all"]):
+    def __init__(self, dataset: DatasetString | Literal["all"], category : str | None = None):
         """
         Initializes the dataset.
 
@@ -42,6 +42,9 @@ class AnomalyDataset:
         The class assumes that the data folder is located two directories up from this file.
         """
         self.dataset = dataset
+        self.category = category
+        self.train = False
+        self.test = True
         self.data_root = pathlib.Path(__file__).parent.parent.parent.parent.resolve() / "data"
         # Initialize empty lists to store file paths, metadata and labels.
         self.data: list[pathlib.Path] = []
@@ -270,6 +273,8 @@ class AnomalyDataset:
 
         # Next, check for any extracted folders (without corresponding tar.xz files).
         for folder in mvtech_root.iterdir():
+            if self.category is not None and folder.name != self.category:
+                continue
             if folder.is_dir() and folder.name not in processed_folders:
                 # Check if the folder contains expected MVTech subdirectories.
                 if (folder / "train").exists() or (folder / "test").exists():
@@ -293,17 +298,26 @@ class AnomalyDataset:
 
         # Process training images: only the 'good' images are used for training.
         train_good_dir = extracted_folder / "train" / "good"
-        if train_good_dir.exists():
+        if train_good_dir.exists() and self.train:
             for file in sorted(train_good_dir.iterdir()):
                 if file.is_file() and file.suffix.lower() in [".jpg", ".jpeg", ".png", ".bmp"]:
                     self.data.append(file)
                     self.labels.append(0)  # Good images are labeled as normal (0)
+                    annotation = Annotation(
+                        image=None,
+                        damaged=False,
+                        bboxes=[],
+                        scores=[],
+                        bboxes_labels=[],
+                        mask=None,
+                    )
                     self.metadata.append(
                         Metadata(
                             component=folder_name,
                             condition="normal",
                             description=f"MVTech {source_desc} (train)",
                             image_path=file,
+                            annotation=annotation,
                             split="train",
                         )
                     )
@@ -311,7 +325,7 @@ class AnomalyDataset:
         # Process test images.
         test_dir = extracted_folder / "test"
         ground_truth_dir = extracted_folder / "ground_truth"
-        if test_dir.exists():
+        if test_dir.exists() and self.test:
             for condition_dir in sorted(test_dir.iterdir()):
                 if condition_dir.is_dir():
                     condition = condition_dir.name.lower()  # e.g., bent_wire, cable_swap, good, etc.
@@ -323,12 +337,29 @@ class AnomalyDataset:
                             self.labels.append(label)
                             # Build corresponding ground truth mask path.
                             gt = ground_truth_dir / condition_dir.name / f"{os.path.splitext(file.name)[0]}_mask.png"
+                            if gt.exists():
+                                with Image.open(gt) as img:
+                                    mask = np.asarray(img.convert('L'))
+                                mask = (mask > 0).astype(np.uint8)
+                            else: 
+                                with Image.open(file) as img:
+                                    mask = np.zeros(img.size)
+                            # Create annotations 
+                            annotation = Annotation(
+                                image=None,
+                                damaged=bool(label),
+                                bboxes=[],
+                                scores=[],
+                                bboxes_labels=[],
+                                mask=mask,
+                            )
+
                             self.metadata.append(
                                 Metadata(
                                     component=folder_name,
                                     condition=condition,
                                     description=f"MVTech {source_desc} (test)",
-                                    ground_truth=gt if gt.exists() else None,
+                                    annotation=annotation, 
                                     image_path=file,
                                     split="test",
                                 )
