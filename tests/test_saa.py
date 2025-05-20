@@ -80,7 +80,7 @@ def test_saa_predict() -> None:
     try:
         model.set_ensemble_prompts(defect_prompts)
         model.set_object_prompt(object_prompt)
-        predictions = model.predict(image)
+        prediction = model.predict(image)
     except NotImplementedError:
         pytest.skip("SAA.predict() is not implemented.")
     except AttributeError as e:
@@ -93,41 +93,4 @@ def test_saa_predict() -> None:
         pytest.fail(f"model.predict() raised an unexpected exception: {e}")
 
     # Validate the output structure and types
-    assert isinstance(predictions, list), f"Predictions should be a list, but got {type(predictions)}"
-
-    # if not predictions:
-    #     # If no predictions are returned, it might be valid (e.g., no defects found).
-    #     # Further assertions could depend on specific expected behavior for the given inputs.
-    #     pass  # Or add specific checks, e.g. `assert not prompts_expecting_detection`
-
-    # for ann_idx, ann in enumerate(predictions):
-    #     assert isinstance(ann, Annotation), (
-    #         f"Item {ann_idx} in predictions should be an Annotation object, got {type(ann)}"
-    #     )
-
-    #     # Validate Annotation fields
-    #     assert hasattr(ann, "bbox"), f"Annotation {ann_idx} must have 'bbox' attribute."
-    #     assert isinstance(ann.bbox, list), f"Annotation {ann_idx} .bbox should be a list, got {type(ann.bbox)}"
-    #     assert len(ann.bbox) == 4, f"Annotation {ann_idx} .bbox should have 4 elements (xyxy), got {len(ann.bbox)}"
-    #     assert all(isinstance(coord, (int, float)) for coord in ann.bbox), (
-    #         f"Annotation {ann_idx} .bbox coordinates should be numbers, got {ann.bbox}"
-    #     )
-
-    #     assert hasattr(ann, "mask"), f"Annotation {ann_idx} must have 'mask' attribute."
-    #     assert isinstance(ann.mask, np.ndarray), (
-    #         f"Annotation {ann_idx} .mask should be a numpy array, got {type(ann.mask)}"
-    #     )
-    #     assert ann.mask.ndim == 2, f"Annotation {ann_idx} .mask should be a 2D array, got {ann.mask.ndim} dimensions."
-    #     assert ann.mask.shape == (mock_image_height, mock_image_width), (
-    #         f"Annotation {ann_idx} .mask dimensions {ann.mask.shape} should match image dimensions {(mock_image_height, mock_image_width)}."
-    #     )
-    #     # Consider dtype check if specific (e.g., bool or uint8), but can be flexible.
-    #     # assert ann.mask.dtype == bool or np.issubdtype(ann.mask.dtype, np.uint8), \
-    #     #     f"Annotation {ann_idx} .mask dtype was {ann.mask.dtype}, expected bool or uint8."
-
-    #     assert hasattr(ann, "label"), f"Annotation {ann_idx} must have 'label' attribute."
-    #     assert isinstance(ann.label, str), f"Annotation {ann_idx} .label should be a string, got {type(ann.label)}"
-
-    #     assert hasattr(ann, "score"), f"Annotation {ann_idx} must have 'score' attribute."
-    #     assert isinstance(ann.score, float), f"Annotation {ann_idx} .score should be a float, got {type(ann.score)}"
-    #     assert 0.0 <= ann.score <= 1.0, f"Annotation {ann_idx} .score should be between 0.0 and 1.0, got {ann.score}"
+    assert isinstance(prediction, Annotation), f"Predictions should be a Annotation, but got {type(prediction)}"

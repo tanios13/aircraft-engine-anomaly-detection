@@ -177,7 +177,7 @@ def draw_annotation(
     if ax is None:
         fig, ax = plt.subplots(figsize=(6, 6))
     else:
-        fig = ax.figure
+        fig = ax.figure  # type: ignore
     ax.imshow(image)
     ax.axis("off")
 
