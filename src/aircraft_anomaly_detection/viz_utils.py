@@ -183,9 +183,16 @@ def draw_annotation(
 
     if show_boxes and annotation.bboxes:
         cmap = cmap or plt.rcParams["axes.prop_cycle"].by_key()["color"]
-        for i, (bbox, label) in enumerate(zip(annotation.bboxes, annotation.bboxes_labels)):
+
+        # Get labels and scores safely with defaults
+        labels = annotation.bboxes_labels or [""] * len(annotation.bboxes)
+        scores = annotation.scores or [0.0] * len(annotation.bboxes)
+
+        for i, bbox in enumerate(annotation.bboxes):
             x1, y1, x2, y2 = bbox
             colour = cmap[i % len(cmap)]  # type: ignore
+
+            # Always draw the box
             ax.add_patch(
                 mpatches.Rectangle(
                     (x1, y1),
@@ -196,14 +203,27 @@ def draw_annotation(
                     linewidth=linewidth,
                 )
             )
-            ax.text(
-                x1,
-                y1 - 2,
-                label,
-                color="white",
-                fontsize=9,
-                bbox=dict(facecolor=colour, alpha=0.6, pad=1, edgecolor="none"),
-            )
+
+            # Prepare label text
+            label_text = labels[i] if i < len(labels) else ""
+            if scores is not None and i < len(scores):
+                score = scores[i]
+                if label_text:
+                    label_text += f" {score:.2f}"
+                else:
+                    label_text = f"{score:.2f}"
+
+            # Display label if it exists
+            if label_text:
+                ax.text(
+                    x1,
+                    y1 - 2,
+                    label_text,
+                    color="white",
+                    fontsize=9,
+                    bbox=dict(facecolor=colour, alpha=0.6, pad=1, edgecolor="none"),
+                )
+
     if show_mask and annotation.mask is not None:
         ax.imshow(
             MaskedArray(annotation.mask, annotation.mask == 0),  # type: ignore
