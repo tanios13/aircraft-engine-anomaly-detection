@@ -29,7 +29,7 @@ class Metadata(BaseModel):
 
 
 class AnomalyDataset:
-    def __init__(self, dataset: DatasetString | Literal["all"]):
+    def __init__(self, dataset: DatasetString | Literal["all"], category : str | None = None):
         """
         Initializes the dataset.
 
@@ -42,6 +42,9 @@ class AnomalyDataset:
         The class assumes that the data folder is located two directories up from this file.
         """
         self.dataset = dataset
+        self.category = category
+        self.train = False
+        self.test = True
         self.data_root = pathlib.Path(__file__).parent.parent.parent.parent.resolve() / "data"
         # Initialize empty lists to store file paths, metadata and labels.
         self.data: list[pathlib.Path] = []
@@ -157,31 +160,85 @@ class AnomalyDataset:
         )
 
     def _load_synthetic(self) -> None:
-        root = self.data_root / "Synthetic_anomaly_dataset"
-        if not root.exists():
-            raise ValueError(f"Synthetic dataset directory {root} does not exist.")
-        for comp_dir in root.iterdir():
-            if not comp_dir.is_dir():
+        synth_root = self.data_root / "synthetic"
+        ann_file = synth_root / "instances_default.json"
+        if not ann_file.exists():
+            raise ValueError(f"COCO annotations file {ann_file} not found.")
+
+        coco = COCO(str(ann_file))
+        cat_id2name = {c["id"]: c["name"] for c in coco.dataset["categories"]}
+
+        for img_id in coco.getImgIds():
+            info = coco.loadImgs(img_id)[0]
+            img_path = synth_root / info["file_name"]
+            if not img_path.exists():
+                print(f"Missing image {img_path}; skipping")
                 continue
-            for cond_dir in comp_dir.iterdir():
-                if not cond_dir.is_dir():
+
+            h, w = info["height"], info["width"]
+            mask_total = np.zeros((h, w), dtype=np.uint8)
+            bboxes, scores, labels_box = [], [], []
+
+            # ── gather annotations for this image ────────────────────────────────────
+            for ann in coco.loadAnns(coco.getAnnIds(imgIds=[img_id])):
+                cid = ann["category_id"]
+
+                # skip the old ‘scratches‑dents’ umbrella class (id 0)
+                if cid == 0:
                     continue
-                cond = cond_dir.name.lower()
-                if cond not in ("normal", "scratched"):
-                    continue
-                for img_fp in cond_dir.iterdir():
-                    if not img_fp.is_file():
-                        continue
-                    self.data.append(img_fp)
-                    self.labels.append(0 if cond == "normal" else 1)
-                    self.metadata.append(
-                        Metadata(
-                            component=comp_dir.name,
-                            condition=cond,
-                            image_path=img_fp,
-                        )
-                    )
-        print(f"Loaded {len(self.data)} synthetic images.")
+
+                cat_name = cat_id2name[cid]  # e.g. 1 → "chip", 2 → "dent"
+
+                # bbox
+                x, y, bw, bh = ann["bbox"]
+                bboxes.append([x, y, x + bw, y + bh])
+                scores.append(float(ann.get("score", 1.0)))
+                labels_box.append(cat_name)
+
+                # mask (polygon / RLE / bbox fallback)
+                seg = ann.get("segmentation")
+                if seg:
+                    if isinstance(seg, list):
+                        rles = mask_utils.frPyObjects(seg, h, w)
+                        rle = mask_utils.merge(rles)
+                        m = mask_utils.decode(rle)
+                    else:
+                        m = mask_utils.decode(seg)
+                    mask_total |= m
+                else:
+                    x0, y0, x1, y1 = map(int, [x, y, x + bw, y + bh])
+                    mask_total[y0:y1, x0:x1] = 1
+
+            # ── image‑level metadata ─────────────────────────────────────────────────
+            is_damaged = bool(bboxes)  # True if any bbox kept
+            img_condition = "damaged" if is_damaged else "normal"
+
+            annotation = Annotation(
+                image=None,
+                damaged=is_damaged,
+                bboxes=bboxes,
+                scores=scores,
+                bboxes_labels=labels_box,
+                mask=mask_total,
+            )
+
+            self.data.append(img_path)
+            self.labels.append(1 if is_damaged else 0)  # 1 = damaged, 0 = normal
+            self.metadata.append(
+                Metadata(
+                    component="rotors",
+                    condition=img_condition,
+                    image_path=img_path,
+                    annotation=annotation,
+                    split="test",
+                    description=("Synthetic COCO dataset ('normal' class, per-anomaly categories by ID)"),
+                )
+            )
+
+        print(
+            f"Loaded {len(self.data)} Synthetic images "
+            f"({sum(self.labels)} damaged / {len(self.labels) - sum(self.labels)} normal)."
+        )
 
     def _load_mvtech(self) -> None:
         mvtech_root = self.data_root / "mvtech"
@@ -216,6 +273,8 @@ class AnomalyDataset:
 
         # Next, check for any extracted folders (without corresponding tar.xz files).
         for folder in mvtech_root.iterdir():
+            if self.category is not None and folder.name != self.category:
+                continue
             if folder.is_dir() and folder.name not in processed_folders:
                 # Check if the folder contains expected MVTech subdirectories.
                 if (folder / "train").exists() or (folder / "test").exists():
@@ -239,17 +298,26 @@ class AnomalyDataset:
 
         # Process training images: only the 'good' images are used for training.
         train_good_dir = extracted_folder / "train" / "good"
-        if train_good_dir.exists():
+        if train_good_dir.exists() and self.train:
             for file in sorted(train_good_dir.iterdir()):
                 if file.is_file() and file.suffix.lower() in [".jpg", ".jpeg", ".png", ".bmp"]:
                     self.data.append(file)
                     self.labels.append(0)  # Good images are labeled as normal (0)
+                    annotation = Annotation(
+                        image=None,
+                        damaged=False,
+                        bboxes=[],
+                        scores=[],
+                        bboxes_labels=[],
+                        mask=None,
+                    )
                     self.metadata.append(
                         Metadata(
                             component=folder_name,
                             condition="normal",
                             description=f"MVTech {source_desc} (train)",
                             image_path=file,
+                            annotation=annotation,
                             split="train",
                         )
                     )
@@ -257,7 +325,7 @@ class AnomalyDataset:
         # Process test images.
         test_dir = extracted_folder / "test"
         ground_truth_dir = extracted_folder / "ground_truth"
-        if test_dir.exists():
+        if test_dir.exists() and self.test:
             for condition_dir in sorted(test_dir.iterdir()):
                 if condition_dir.is_dir():
                     condition = condition_dir.name.lower()  # e.g., bent_wire, cable_swap, good, etc.
@@ -269,12 +337,29 @@ class AnomalyDataset:
                             self.labels.append(label)
                             # Build corresponding ground truth mask path.
                             gt = ground_truth_dir / condition_dir.name / f"{os.path.splitext(file.name)[0]}_mask.png"
+                            if gt.exists():
+                                with Image.open(gt) as img:
+                                    mask = np.asarray(img.convert('L'))
+                                mask = (mask > 0).astype(np.uint8)
+                            else: 
+                                with Image.open(file) as img:
+                                    mask = np.zeros(img.size)
+                            # Create annotations 
+                            annotation = Annotation(
+                                image=None,
+                                damaged=bool(label),
+                                bboxes=[],
+                                scores=[],
+                                bboxes_labels=[],
+                                mask=mask,
+                            )
+
                             self.metadata.append(
                                 Metadata(
                                     component=folder_name,
                                     condition=condition,
                                     description=f"MVTech {source_desc} (test)",
-                                    ground_truth=gt if gt.exists() else None,
+                                    annotation=annotation, 
                                     image_path=file,
                                     split="test",
                                 )
