@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any
 
 import numpy as np
 from PIL import Image
@@ -42,42 +40,3 @@ class Annotation:
             raise ValueError(
                 f"`bboxes` {len(self.bboxes)} must match `scores` {len(self.scores)} and `bboxes_labels` {len(self.bboxes_labels)}"
             )
-
-
-class ModelInterface(ABC):
-    """Abstract interface that all prediction models must implement."""
-
-    @abstractmethod
-    def predict(self, input_image: str | Image.Image | np.ndarray, **kwargs) -> Annotation:
-        """Return model predictions for the supplied input.
-
-        Args:
-            input: The input passed to the model. The concrete type depends
-                on the implementation (e.g., a file path, a ``PIL.Image``, or a
-                NumPy array).
-
-        Returns:
-            An :class:`Annotation` instance for single-image inputs or a list of
-            :class:`Annotation` instances for batched inputs.
-        """
-        raise NotImplementedError
-
-    def load_image(self, input_image: str | Image.Image | np.ndarray) -> Image.Image:
-        """
-        Load an image from a file path, a numpy array, or a PIL image, and return a PIL Image in RGB.
-
-        Args:
-            input_image (Union[str, Image.Image, np.ndarray]): Image file path, numpy array, or PIL Image.
-
-        Returns:
-            Image.Image: Loaded image in RGB mode.
-        """
-        if isinstance(input_image, str):
-            image = Image.open(input_image).convert("RGB")
-        elif isinstance(input_image, Image.Image):
-            image = input_image.convert("RGB")
-        elif isinstance(input_image, np.ndarray):
-            image = Image.fromarray(np.uint8(input_image)).convert("RGB")
-        else:
-            raise ValueError("input_image must be a file path (str), a PIL.Image.Image, or a numpy.ndarray.")
-        return image

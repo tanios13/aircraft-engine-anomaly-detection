@@ -74,7 +74,9 @@ class OwlViT(ModelInterface):
                 mask=self.box_to_mask(image, boxes),
             )
         else:
-            ann = Annotation(image=image, damaged=False, bboxes=[], scores=[], bboxes_labels=[], mask=self.box_to_mask(image, boxes))
+            ann = Annotation(
+                image=image, damaged=False, bboxes=[], scores=[], bboxes_labels=[], mask=self.box_to_mask(image, boxes)
+            )
         return ann
 
     def plot(
