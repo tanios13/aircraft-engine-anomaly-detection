@@ -1,16 +1,16 @@
-import tqdm
 import pandas as pd
+import tqdm
 
-from aircraft_anomaly_detection.interfaces import ModelInterface
 from aircraft_anomaly_detection.dataloader.loader import AnomalyDataset
 from aircraft_anomaly_detection.eval.evaluator import Evaluator
+from aircraft_anomaly_detection.interfaces import ModelInterface
 from aircraft_anomaly_detection.viz_utils import visualize_mask_overlap_with_image
 
 
 def evaluate(dataset: AnomalyDataset, model: ModelInterface, output_dir: str = None):
     """
     Evaluate the model on the given dataset.
-    
+
     Args:
         dataset (AnomalyDataset): The dataset to evaluate the model on.
     """
@@ -23,7 +23,7 @@ def evaluate(dataset: AnomalyDataset, model: ModelInterface, output_dir: str = N
     for i in tqdm.tqdm(range(len(dataset))):
         image, label, metadata = dataset[i]
         grd_annotation_list.append(metadata.annotation)
-        
+
         pred_annotation = model.predict(image)
         pred_annotation_list.append(pred_annotation)
 

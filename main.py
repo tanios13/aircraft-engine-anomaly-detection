@@ -1,4 +1,3 @@
-import argparse
 import os
 from pathlib import Path
 from types import SimpleNamespace
@@ -6,8 +5,7 @@ from typing import get_args
 
 import yaml
 
-from aircraft_anomaly_detection.dataloader.loader import (AnomalyDataset,
-                                                          DatasetString)
+from aircraft_anomaly_detection.dataloader.loader import AnomalyDataset, DatasetString
 from aircraft_anomaly_detection.models.faster_rcnn import FasterRCNN
 from aircraft_anomaly_detection.models.owlvit import OwlViT
 from aircraft_anomaly_detection.pipeline import evaluate, infer

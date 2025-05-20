@@ -44,9 +44,22 @@ quote-style = "double" # Optional: enforce double quotes
 indent-style = "space" # Optional: use spaces instead of tabs
 
 [tool.mypy]
-no_implicit_optional = true
-check_untyped_defs = true
-ignore_missing_imports = true
+python_version = "3.10"
+ignore_missing_imports = true  # Ignore missing type hints in external libs (e.g. some ML libs), for now
+explicit_package_bases = true  # Recognize the src/ layout (treat src as package root)
+disallow_untyped_defs = true   # Require type hints for function and method definitions:contentReference[oaicite:0]{index=0}
+disallow_incomplete_defs = true  # Require hints for functions with default values
+no_implicit_optional = true    # Don't treat missing None as Optional (be explicit)
+warn_return_any = true         # Warn if a function returns Any (likely missing hints)
+warn_unused_ignores = true     # Warn if a `# type: ignore` comment is no longer needed:contentReference[oaicite:1]{index=1}
+show_error_codes = true        # Show error codes for mypy (e.g. [attr-defined])
+mypy_path = "src"          # Set the source directory for mypy
+# (Optional strictness – enable gradually if desired)
+disallow_untyped_calls = true      # Flag calls to functions without type hints (can be noisy in ML code)
+disallow_subclassing_any = true    # Prevent subclassing untyped classes (e.g. from untyped libs)
+disallow_untyped_decorators = true # Prevent using decorators without type hints
+disallow_any_unimported = true     # Treat missing stubs as errors instead of Any
+
 
 [tool.uv.sources]
 clip = { git = "https://github.com/openai/CLIP.git" }
