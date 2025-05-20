@@ -72,7 +72,6 @@ def refine_annotation(annotation, background_mask):
     valid_bbox_idx = []
     for i in range(len(annotation.bboxes)):
         x1, y1, x2, y2 = annotation.bboxes[i]
-        cropped = annotation.image.crop((x1, y1, x2, y2))
         area = (x2 - x1) * (y2 - y1)
         background_area = np.sum(background_mask[y1:y2, x1:x2])
         if background_area / area < 0.5:
