@@ -4,12 +4,13 @@ import random
 from collections.abc import Iterable
 from os import PathLike
 from pathlib import Path
-from matplotlib.patches import Patch
 
 import matplotlib.patches as mpatches
 import matplotlib.path as mpath
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.patches import Patch
+from numpy.ma import MaskedArray
 from PIL import Image
 from pycocotools import mask as mask_utils
 from pycocotools.coco import COCO
@@ -153,19 +154,20 @@ def draw_annotation(
     show_boxes: bool = True,
     show_mask: bool = True,
     cmap: Iterable[str] | None = None,
-    ax=None,
+    ax: plt.Axes | None = None,
     alpha: float = 0.4,
     linewidth: float = 2.0,
     save_path: str | Path | None = None,
-):
+) -> plt.Axes:
     """
+    Overlay an Annotation on a PIL image.
     Overlay an Annotation on a PIL image.
 
     Parameters
     ----------
     image        : PIL.Image
     annotation   : Annotation instance
-    show_boxes   : draw bounding‑boxes if True
+    show_boxes   : draw bounding-boxes if True
     show_mask    : draw segmentation mask if True
     cmap         : colour cycle for successive boxes
     ax           : existing matplotlib axis (created if None)
@@ -202,10 +204,9 @@ def draw_annotation(
                 fontsize=9,
                 bbox=dict(facecolor=colour, alpha=0.6, pad=1, edgecolor="none"),
             )
-
     if show_mask and annotation.mask is not None:
         ax.imshow(
-            np.ma.MaskedArray(annotation.mask, annotation.mask == 0),
+            MaskedArray(annotation.mask, annotation.mask == 0),  # type: ignore
             alpha=alpha,
             cmap="RdBu",
         )
@@ -222,9 +223,10 @@ def visualize_mask_overlap_with_image(
     mask1: np.ndarray,
     mask2: np.ndarray,
     title: str = "Mask Overlap",
-    save_path: str = None
-):
+    save_path: str | Path | None = None,
+) -> None:
     """
+    Show a PIL image with overlaid ground truth and predicted masks,
     Show a PIL image with overlaid ground truth and predicted masks,
     and display a legend explaining the colors.
     """

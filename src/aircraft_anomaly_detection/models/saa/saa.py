@@ -1,10 +1,10 @@
 from collections.abc import Sequence
+from itertools import compress
 from typing import Any, Literal
 
 import numpy as np
 import torch
 from PIL import Image
-from regex import P
 
 from aircraft_anomaly_detection.interface.model import DetectorInterface, ModelInterface, SegmentorInterface
 from aircraft_anomaly_detection.models.saa import dino, sam
@@ -76,6 +76,8 @@ class SAA(ModelInterface):
         # Set prompts parameters
         self._prompt_pairs: Sequence[PromptPair] = []
         self._obj_prompt: ObjectPrompt | None = None
+
+        # nms
 
     def predict(self, input_image: str | Image.Image | np.ndarray, **kwargs: dict[str, Any]) -> Annotation:
         """
@@ -160,6 +162,7 @@ class SAA(ModelInterface):
 
         all_boxes: list[torch.Tensor] = []
         all_scores: list[float] = []
+        all_phrases: list[str] = []
         max_box_area = 0.0
 
         if object_prompt is not None:
@@ -201,8 +204,10 @@ class SAA(ModelInterface):
 
             boxes_t = boxes_t[keep]
             scores_t = scores_t[keep]
+
             all_boxes.append(boxes_t)
             all_scores.extend(scores_t.tolist())
+            all_phrases.extend(compress(det_phrases, keep))
             max_box_area = max(max_box_area, box_area_xyxy(boxes_t).max().item())
 
         if not all_boxes:
@@ -210,13 +215,13 @@ class SAA(ModelInterface):
             return [empty_mask], [0.0], 1.0
 
         # 3️⃣ Stack, convert to XYXY abs, NMS
-        boxes_cat = torch.cat(all_boxes, dim=0)
-        boxes_xyxy = cxcywh_to_xyxy(boxes_cat, w, h)
+        boxes_xyxy = torch.cat(all_boxes, dim=0)
         scores_cat = torch.as_tensor(all_scores)
         keep_idx = nms_xyxy(boxes_xyxy, scores_cat, nms_iou_thr)
 
         boxes_xyxy = boxes_xyxy[keep_idx]
         scores_cat = scores_cat[keep_idx]
+        phrases_cat = compress(all_phrases, keep_idx)
 
         # 4️⃣ Run the segmentor once for all kept boxes
         masks = self.anomaly_region_refiner.predict(boxes_xyxy.cpu().numpy(), multimask_output=False)
@@ -225,9 +230,12 @@ class SAA(ModelInterface):
         try:
             from aircraft_anomaly_detection.viz_utils import draw_annotation  # local helper
 
-            ann = Annotation(bboxes=boxes_xyxy.cpu().numpy().tolist(), scores=scores_out)
+            ann = Annotation(
+                bboxes=boxes_xyxy.cpu().numpy().tolist(), scores=scores_out, bboxes_labels=list(phrases_cat)
+            )
 
-            ax = draw_annotation(image, ann, save_path="debug.png")
+            ax = draw_annotation(image, ann, show_boxes=True, save_path="debug.png")
+            ax.show()
         except Exception as exc:  # pylint: disable=broad-except
             print(f"[DEBUG] Could not save debug visualisation: {exc}")
 
