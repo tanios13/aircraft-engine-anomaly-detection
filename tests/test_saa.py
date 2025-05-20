@@ -5,6 +5,7 @@ from sympy import im
 from aircraft_anomaly_detection.dataloader import AnomalyDataset
 from aircraft_anomaly_detection.models.saa.saa import SAA
 from aircraft_anomaly_detection.schemas import Annotation, ObjectPrompt, PromptPair
+from aircraft_anomaly_detection.viz_utils import draw_annotation
 
 
 def test_saa_instantiation() -> None:
@@ -63,7 +64,8 @@ def test_saa_predict() -> None:
 
     # Prepare mock inputs for the predict method
     # Image: numpy array (H, W, C)
-    image, _, _ = AnomalyDataset("mvtech").filter_by_component("cable").filter_by(lambda _, m, l: l == 1)[0]
+    image, _, meta = AnomalyDataset("mvtech").filter_by_component("cable").filter_by(lambda _, m, l: l == 1)[0]
+    _ = draw_annotation(image, meta.annotation, show_boxes=True, show_mask=True, save_path="0_original_annotated.png")
 
     # Prompts: Sequence[PromptPair]
     defect_prompts = [

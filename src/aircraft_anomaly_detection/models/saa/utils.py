@@ -12,9 +12,9 @@ def cxcywh_to_xyxy(boxes: torch.Tensor, w: int, h: int) -> torch.Tensor:
     return boxes_abs
 
 
-def nms_xyxy(boxes_xyxy: torch.Tensor, scores: torch.Tensor, iou_thr: float = 0.5) -> torch.Tensor:
+def nms_xyxy(boxes_xyxy: torch.Tensor, scores: torch.Tensor, iou_thr: float = 0.5) -> torch.IntTensor:
     """Thin wrapper around torchvision NMS that keeps indices."""
-    keep_idx: torch.Tensor = tv_ops.nms(boxes_xyxy, scores, iou_thr)
+    keep_idx: torch.IntTensor = tv_ops.nms(boxes_xyxy, scores, iou_thr)
     return keep_idx
 
 

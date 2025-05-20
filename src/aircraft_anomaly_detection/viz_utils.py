@@ -15,7 +15,7 @@ from PIL import Image
 from pycocotools import mask as mask_utils
 from pycocotools.coco import COCO
 
-from .interfaces import Annotation
+from aircraft_anomaly_detection.schemas.data import Annotation
 
 
 class CocoVisualizer:

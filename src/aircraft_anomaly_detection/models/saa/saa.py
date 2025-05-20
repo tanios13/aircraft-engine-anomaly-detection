@@ -78,6 +78,7 @@ class SAA(ModelInterface):
         self._obj_prompt: ObjectPrompt | None = None
 
         # nms
+        self.nms_iou_thr: float = kwargs.get("nms_iou_thr", 0.5)  # type: ignore
 
     def predict(self, input_image: str | Image.Image | np.ndarray, **kwargs: dict[str, Any]) -> Annotation:
         """
@@ -89,27 +90,34 @@ class SAA(ModelInterface):
         Returns:
             Annotation: The predicted anomaly map and any additional information.
         """
+        if self._obj_prompt is None or len(self._prompt_pairs) == 0:
+            raise ValueError("Object prompt and defect prompts must be set before calling predict.")
+
         image = self.load_image(input_image)
 
+        # object segmentation
         obj_masks, obj_scores, obj_area = self.ensemble_text_guided_mask_proposal(
             image=image,
             object_prompt=self._obj_prompt,
             box_thr=self.box_threshold,
             text_thr=self.text_threshold,
+            nms_iou_thr=self.nms_iou_thr,
+            debug_path="1_object.png",
         )
 
-        # update size constraints for anomaly search
-        # self.defect_max_area = obj_area * self.defect_area_threshold
-        # # -- defect-level TGMP -------------------------------------------------
-        # defect_masks, defect_scores, _ = self.ensemble_text_guided_mask_proposal(
-        #     image=image,
-        #     defect_prompt=self.defect_prompt_pairs,  # list[PromptPair]
-        #     object_prompt=None,
-        #     box_thr=self.box_threshold,
-        #     text_thr=self.text_threshold,
-        #     area_min=0.0,
-        #     area_max=self.defect_max_area,
-        # )
+        defect_max_area = obj_area * self._obj_prompt.anomaly_area_ratio
+        defect_min_area = 0.0
+
+        # object-level TGMP
+        defect_masks, defect_scores, _ = self.ensemble_text_guided_mask_proposal(
+            image,
+            defect_prompts=self._prompt_pairs,
+            box_thr=self.box_threshold,
+            text_thr=self.text_threshold,
+            area_min=defect_min_area,
+            area_max=defect_max_area,
+            debug_path="2_defect.png",
+        )
 
         return Annotation()
 
@@ -139,6 +147,7 @@ class SAA(ModelInterface):
         area_min: float | None = None,
         area_max: float | None = None,
         nms_iou_thr: float = 0.5,
+        debug_path: str = "",
     ) -> tuple[list[np.ndarray], list[float], float]:
         """Run detector → filter → segmentor for all prompts and fuse results.
 
@@ -168,9 +177,11 @@ class SAA(ModelInterface):
         if object_prompt is not None:
             prompts: Sequence[PromptPair] = [PromptPair(target=object_prompt.name, background="")]
             area_max = object_prompt.object_max_area
-            area_min = 0.0
+            area_min = object_prompt.object_min_area
         elif defect_prompts is not None:
             prompts = defect_prompts
+            area_min = area_min if area_min is not None else 0.0
+            area_max = area_max if area_max is not None else 0.1
         else:
             raise ValueError("No prompts provided for ensemble text-guided mask proposal.")
 
@@ -217,27 +228,27 @@ class SAA(ModelInterface):
         # 3️⃣ Stack, convert to XYXY abs, NMS
         boxes_xyxy = torch.cat(all_boxes, dim=0)
         scores_cat = torch.as_tensor(all_scores)
-        keep_idx = nms_xyxy(boxes_xyxy, scores_cat, nms_iou_thr)
+        keep_idx: torch.IntTensor = nms_xyxy(boxes_xyxy, scores_cat, nms_iou_thr)
 
         boxes_xyxy = boxes_xyxy[keep_idx]
         scores_cat = scores_cat[keep_idx]
-        phrases_cat = compress(all_phrases, keep_idx)
+        phrases_cat = [all_phrases[i] for i in keep_idx.cpu().tolist()]
 
         # 4️⃣ Run the segmentor once for all kept boxes
-        masks = self.anomaly_region_refiner.predict(boxes_xyxy.cpu().numpy(), multimask_output=False)
+        masks = self.anomaly_region_refiner.predict(boxes_xyxy.cpu().numpy(), multimask_output=True)
         scores_out = scores_cat.tolist()
 
-        try:
+        if len(debug_path):
             from aircraft_anomaly_detection.viz_utils import draw_annotation  # local helper
 
             ann = Annotation(
-                bboxes=boxes_xyxy.cpu().numpy().tolist(), scores=scores_out, bboxes_labels=list(phrases_cat)
+                bboxes=boxes_xyxy.cpu().numpy().tolist(),  # type: ignore
+                scores=scores_out,
+                bboxes_labels=phrases_cat,
+                mask=np.any(masks, axis=0).astype(np.uint8),
             )
 
-            ax = draw_annotation(image, ann, show_boxes=True, save_path="debug.png")
-            ax.show()
-        except Exception as exc:  # pylint: disable=broad-except
-            print(f"[DEBUG] Could not save debug visualisation: {exc}")
+            _ = draw_annotation(image, ann, show_mask=True, show_boxes=True, save_path=debug_path)
 
         return list(masks), scores_out, max_box_area
 
