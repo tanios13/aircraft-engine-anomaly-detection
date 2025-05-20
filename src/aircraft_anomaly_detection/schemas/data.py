@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 from PIL import Image
+from pydantic import BaseModel, Field, FilePath
 
 
 @dataclass
@@ -40,3 +41,16 @@ class Annotation:
             raise ValueError(
                 f"`bboxes` {len(self.bboxes)} must match `scores` {len(self.scores)} and `bboxes_labels` {len(self.bboxes_labels)}"
             )
+
+
+class Metadata(BaseModel):
+    component: str  # e.g., oil_pump, pistons, etc.
+    condition: str  # e.g., normal, scratched
+    ground_truth: FilePath | None = None  # Optional ground truth field
+    image_path: FilePath | None = None  # Optional image path field
+    description: str = Field(default="")  # Optional description field
+    split: str = Field(default="")  # Optional split field (train/test/val)
+    annotation: Annotation | None = None  # Optional annotations field
+
+    class Config:
+        arbitrary_types_allowed = True

@@ -65,6 +65,7 @@ def test_saa_predict() -> None:
     # Prepare mock inputs for the predict method
     # Image: numpy array (H, W, C)
     image, _, meta = AnomalyDataset("mvtech").filter_by_component("cable").filter_by(lambda _, m, l: l == 1)[0]
+    assert meta.annotation is not None, "Metadata annotation should not be None"
     _ = draw_annotation(image, meta.annotation, show_boxes=True, show_mask=True, save_path="0_original_annotated.png")
 
     # Prompts: Sequence[PromptPair]

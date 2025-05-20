@@ -8,28 +8,14 @@ import numpy as np
 from PIL import Image
 from pycocotools import mask as mask_utils
 from pycocotools.coco import COCO
-from pydantic import BaseModel, Field, FilePath
 
-from ..interfaces import Annotation
+from aircraft_anomaly_detection.schemas.data import Annotation, Metadata
 
 DatasetString = Literal["synthetic", "mvtech", "lufthansa"]
 
 
-class Metadata(BaseModel):
-    component: str  # e.g., oil_pump, pistons, etc.
-    condition: str  # e.g., normal, scratched
-    ground_truth: FilePath | None = None  # Optional ground truth field
-    image_path: FilePath | None = None  # Optional image path field
-    description: str = Field(default="")  # Optional description field
-    split: str = Field(default="")  # Optional split field (train/test/val)
-    annotation: Annotation | None = None  # Optional annotations field
-
-    class Config:
-        arbitrary_types_allowed = True
-
-
 class AnomalyDataset:
-    def __init__(self, dataset: DatasetString | Literal["all"], category : str | None = None):
+    def __init__(self, dataset: DatasetString | Literal["all"], category: str | None = None):
         """
         Initializes the dataset.
 
@@ -339,12 +325,12 @@ class AnomalyDataset:
                             gt = ground_truth_dir / condition_dir.name / f"{os.path.splitext(file.name)[0]}_mask.png"
                             if gt.exists():
                                 with Image.open(gt) as img:
-                                    mask = np.asarray(img.convert('L'))
+                                    mask = np.asarray(img.convert("L"))
                                 mask = (mask > 0).astype(np.uint8)
-                            else: 
+                            else:
                                 with Image.open(file) as img:
                                     mask = np.zeros(img.size)
-                            # Create annotations 
+                            # Create annotations
                             annotation = Annotation(
                                 image=None,
                                 damaged=bool(label),
@@ -359,7 +345,7 @@ class AnomalyDataset:
                                     component=folder_name,
                                     condition=condition,
                                     description=f"MVTech {source_desc} (test)",
-                                    annotation=annotation, 
+                                    annotation=annotation,
                                     image_path=file,
                                     split="test",
                                 )
