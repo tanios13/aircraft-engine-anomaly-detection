@@ -1,66 +1,95 @@
 import matplotlib.pyplot as plt
-from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay, roc_auc_score, f1_score
-from typing import List
+import numpy as np
+import pandas as pd
+from sklearn.metrics import ConfusionMatrixDisplay, accuracy_score, confusion_matrix, f1_score, roc_auc_score, roc_curve
+
 from ..interfaces import Annotation
 
 
 class Evaluator:
-
-    def __init__(self, predictions: List[Annotation], ground_truth: List[Annotation]) -> None:
+    def __init__(self, predictions: list[Annotation], ground_truth: list[Annotation]) -> None:
         if len(predictions) != len(ground_truth):
-            raise ValueError(
-                "The length of predictions and ground truth must be the same"
-            )
+            raise ValueError("The length of predictions and ground truth must be the same")
         self.predictions = predictions
         self.ground_truth = ground_truth
 
     def __call__(self):
         pass
 
-
     def accuracy(self):
         """
         Computes the accuracy of the binary predictions.
-        """        
-        self._check_labels()
-        correct = sum(
-            1 for pred, gt in zip(self.predictions, self.ground_truth)
-            if pred.damaged == gt.damaged
-        )
+        """
+        correct = sum(1 for pred, gt in zip(self.predictions, self.ground_truth) if pred.damaged == gt.damaged)
         return correct / len(self.predictions)
-
 
     def f1_score(self):
         """
         Computes the F1 score of the binary predictions.
         """
-        self._check_labels()
         y_true = [1 if gt.damaged else 0 for gt in self.ground_truth]
         y_pred = [1 if pred.damaged else 0 for pred in self.predictions]
         return f1_score(y_true, y_pred)
-    
+
+    def max_accuracy(self):
+        """
+        Computes the maximum accuracy based on predicted scores.
+        """
+        y_true = np.array([1 if gt.damaged else 0 for gt in self.ground_truth])
+        y_probs = np.array([0.0 if len(pred.scores) == 0 else min(pred.scores) for pred in self.predictions])
+        assert y_true.shape == y_probs.shape
+
+        _, _, thresholds = roc_curve(y_true, y_probs)
+        accuracies = []
+        for threshold in thresholds:
+            accuracies.append(accuracy_score(y_true, (y_probs > threshold)))
+        return max(accuracies)
+
+    def max_f1_score(self):
+        y_true = np.array([1 if gt.damaged else 0 for gt in self.ground_truth])
+        y_probs = np.array([0.0 if len(pred.scores) == 0 else min(pred.scores) for pred in self.predictions])
+        assert y_true.shape == y_probs.shape
+
+        _, _, thresholds = roc_curve(y_true, y_probs)
+        f1_scores = []
+        for threshold in thresholds:
+            f1_scores.append(f1_score(y_true, (y_probs > threshold)))
+        return max(f1_scores)
+
+    def auroc(self):
+        y_true = np.array([1 if gt.damaged else 0 for gt in self.ground_truth])
+        y_probs = np.array([0.0 if len(pred.scores) == 0 else min(pred.scores) for pred in self.predictions])
+        assert y_true.shape == y_probs.shape
+
+        return roc_auc_score(y_true, y_probs)
+
     def plot_confusion_matrix(self, save_path: str = None):
         """
         Plots the confusion matrix of the binary predictions and optionally saves it to a file.
         """
-        self._check_labels()
         y_true = [1 if gt.damaged else 0 for gt in self.ground_truth]
         y_pred = [1 if pred.damaged else 0 for pred in self.predictions]
 
         cm = confusion_matrix(y_true, y_pred, labels=[0, 1])
-        disp = ConfusionMatrixDisplay(
-            confusion_matrix=cm,
-            display_labels=["Undamaged", "Damaged"]
-        )
+        disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=["Undamaged", "Damaged"])
         disp.plot(cmap=plt.cm.Blues)
         plt.title("Confusion Matrix")
         plt.grid(False)
-        
+
         if save_path:
             plt.savefig(save_path)  # Save the plot to the file
             print(f"Confusion matrix saved to {save_path}")
         else:
             plt.show()  # Show the plot if no save_path is provided
+
+    def save_results_table(self, save_path: str):
+        y_true = [1 if gt.damaged else 0 for gt in self.ground_truth]
+        y_probs = [0.0 if len(pred.scores) == 0 else min(pred.scores) for pred in self.predictions]
+        y_pred = [1 if pred.damaged else 0 for pred in self.predictions]
+
+        results_table = pd.DataFrame({"y_true": y_true, "y_pred": y_pred, "y_scores": y_probs})
+        results_table.to_csv(save_path, index=True)
+        print("Results table saved to : {save_path}")
 
     def IoU(self):
         """
@@ -95,12 +124,32 @@ class Evaluator:
         Compute all metrics and return as a dictionary.
         """
         results = {}
+        self._check_labels()
         try:
             results["accuracy"] = [self.accuracy()]
+        except Exception as e:
+            print(f"Error in accuracy computation: {e}")
+
+        try:
             results["f1_score"] = [self.f1_score()]
         except Exception as e:
-            print(f"Error in accuracy and f1 evaluation: {e}")
-        
+            print(f"Error in F1 Score computation: {e}")
+
+        try:
+            results["max_accuracy"] = [self.max_accuracy()]
+        except Exception as e:
+            print(f"Error in max. accuracy computation: {e}")
+
+        try:
+            results["max_f1_score"] = self.max_f1_score()
+        except Exception as e:
+            print(f"Error in max. F1 Score computation: {e}")
+
+        try:
+            results["auroc"] = self.auroc()
+        except Exception as e:
+            print(f"Error in AUROC computation: {e}")
+
         try:
             results["pixel_auroc"] = [self.pixel_auroc()]
         except Exception as e:
@@ -113,8 +162,7 @@ class Evaluator:
 
         return results
 
-
-#-----------------------------------------------HELPERS--------------------------------------------------#
+    # -----------------------------------------------HELPERS--------------------------------------------------#
     def _check_labels(self) -> None:
         """
         Ensures that all predictions and ground truths have a binary label.
@@ -123,7 +171,7 @@ class Evaluator:
             raise ValueError("Prediction label cannot be None")
         if any(gt.damaged is None for gt in self.ground_truth):
             raise ValueError("Ground truth label cannot be None")
-        
+
     def _check_masks(self) -> None:
         """
         Ensures that all predictions and ground truths have a binary mask.

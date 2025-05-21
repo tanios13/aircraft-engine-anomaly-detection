@@ -63,6 +63,7 @@ def evaluate(
     results_df.to_csv(output_dir + "results.csv", index=False)
 
     evaluator.plot_confusion_matrix(output_dir + "confusion_matrix.png")
+    evaluator.save_results_table(output_dir + "results_table.csv")
 
 
 def refine_annotation(annotation, background_mask):
