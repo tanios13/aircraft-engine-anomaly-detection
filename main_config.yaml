@@ -1,4 +1,4 @@
-input: synthetic
+input: lufthansa
 model_name: owlvit
 model_path: google/owlvit-base-patch32
 output_path: data/results/owlvit/

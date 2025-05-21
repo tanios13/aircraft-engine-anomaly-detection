@@ -27,7 +27,7 @@ def main(args):
     # Parse dataset
     if args.input.lower() in get_args(DatasetString) or args.input.lower() == "all":
         category = None if not hasattr(args, "category") else args.category
-        evaluate(AnomalyDataset(args.input.lower(), category), model, args.output_path, background_remover,preprocessor)
+        evaluate(AnomalyDataset(args.input.lower(), category), model, args.output_path, background_remover,preprocessor,args)
     elif os.path.isfile(args.input):
         infer(Path(args.input), model, args.output_path)
     else:

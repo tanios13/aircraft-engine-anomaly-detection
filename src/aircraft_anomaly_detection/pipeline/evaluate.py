@@ -1,10 +1,11 @@
+import os
 from collections.abc import Callable
+from types import SimpleNamespace
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import tqdm
-import os
 
 from aircraft_anomaly_detection.dataloader.loader import AnomalyDataset
 from aircraft_anomaly_detection.eval.evaluator import Evaluator
@@ -18,6 +19,7 @@ def evaluate(
     output_dir: str = None,
     background_remover: Callable | None = None,
     preprocessor: Callable | None = None,
+    args: SimpleNamespace | None = None,
 ):
     """
     Evaluate the model on the given dataset.
@@ -25,6 +27,11 @@ def evaluate(
 
     Args:
         dataset (AnomalyDataset): The dataset to evaluate the model on.
+        model (ModelInterface): The model to evaluate.
+        output_dir (str): The directory to save the results.
+        background_remover (Callable | None): The background remover to use.
+        preprocessor (Callable | None): The preprocessor to use.
+        args (SimpleNamespace): The arguments to use.
     """
 
     # Compute the predictions and ground truth annotations
@@ -65,16 +72,52 @@ def evaluate(
         )
 
     print("Evaluating...")
+
     # Evaluate the model
     evaluator = Evaluator(pred_annotation_list, grd_annotation_list)
     results = evaluator.eval()
 
     print("Saving results...")
 
-    results_df = pd.DataFrame(results)
-    results_df.to_csv(output_dir + "results.csv", index=False)
+    # Prepare results as a dictionary
+    if args is not None:
+        meta_info = {
+            "dataset": args.input.lower(),
+            "model": args.model_name.lower(),
+            "background_removal": "True" if args.remove_background else "False",
+            "preprocessing": args.preprocessing if args.preprocessing else "None",
+        }
+    else:
+        meta_info = {
+            "dataset": "unknown",
+            "model": "unknown",
+            "background_removal": "False",
+            "preprocessing": "None",
+        }
 
-    evaluator.plot_confusion_matrix(output_dir + "confusion_matrix.png")
+    # Merge metadata and evaluation results, with metadata first
+    combined_results = {**meta_info, **results}
+
+    # Clean values: unwrap lists and convert numpy types
+    flat_results = {k: (v[0] if isinstance(v, list) and len(v) == 1 else v) for k, v in combined_results.items()}
+    flat_results = {k: (v.item() if hasattr(v, "item") else v) for k, v in flat_results.items()}
+
+    # Save to DataFrame
+    results_df = pd.DataFrame([flat_results])
+
+    # Output path
+    output_file = os.path.join(output_dir, str(meta_info["dataset"]) + "_results.csv")
+
+    # Save or append
+    if os.path.exists(output_file):
+        existing_df = pd.read_csv(output_file)
+        combined_df = pd.concat([existing_df, results_df], ignore_index=True)
+        combined_df.to_csv(output_file, index=False)
+    else:
+        results_df.to_csv(output_file, index=False)
+
+    # Plot confusion matrix
+    evaluator.plot_confusion_matrix(os.path.join(output_dir, str(meta_info["dataset"]) + "_confusion_matrix.png"))
     evaluator.save_results_table(output_dir + "results_table.csv")
 
 
