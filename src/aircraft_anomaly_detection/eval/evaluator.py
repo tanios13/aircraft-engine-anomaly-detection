@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 from sklearn.metrics import ConfusionMatrixDisplay, accuracy_score, confusion_matrix, f1_score, roc_auc_score, roc_curve
 
 from ..interfaces import Annotation
@@ -80,6 +81,15 @@ class Evaluator:
             print(f"Confusion matrix saved to {save_path}")
         else:
             plt.show()  # Show the plot if no save_path is provided
+
+    def save_results_table(self, save_path: str):
+        y_true = [1 if gt.damaged else 0 for gt in self.ground_truth]
+        y_probs = [0.0 if len(pred.scores) == 0 else min(pred.scores) for pred in self.predictions]
+        y_pred = [1 if pred.damaged else 0 for pred in self.predictions]
+
+        results_table = pd.DataFrame({"y_true": y_true, "y_pred": y_pred, "y_scores": y_probs})
+        results_table.to_csv(save_path, index=True)
+        print("Results table saved to : {save_path}")
 
     def IoU(self):
         """
