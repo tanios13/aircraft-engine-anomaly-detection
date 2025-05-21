@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import tqdm
+import os
 
 from aircraft_anomaly_detection.dataloader.loader import AnomalyDataset
 from aircraft_anomaly_detection.eval.evaluator import Evaluator
@@ -12,7 +13,11 @@ from aircraft_anomaly_detection.viz_utils import visualize_mask_overlap_with_ima
 
 
 def evaluate(
-    dataset: AnomalyDataset, model: ModelInterface, output_dir: str = None, background_remover: Callable | None = None
+    dataset: AnomalyDataset,
+    model: ModelInterface,
+    output_dir: str = None,
+    background_remover: Callable | None = None,
+    preprocessor: Callable | None = None,
 ):
     """
     Evaluate the model on the given dataset.
@@ -37,6 +42,9 @@ def evaluate(
         else:
             no_background_image, background_mask = image, None
 
+        if preprocessor is not None:
+            image = preprocessor(image)
+
         pred_annotation = model.predict(image)
 
         # Postprocessing
@@ -44,6 +52,10 @@ def evaluate(
             refine_annotation(pred_annotation, background_mask)
 
         pred_annotation_list.append(pred_annotation)
+
+        # create directory if it does not exist yet
+        if output_dir is not None and not os.path.exists(output_dir):
+            os.makedirs(output_dir, exist_ok=True)
 
         visualize_mask_overlap_with_image(
             no_background_image,

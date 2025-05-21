@@ -19,6 +19,7 @@ dependencies = [
     "transformers[torch]>=4.51.3",
     "tqdm>=4.67.1",
     "pycocotools>=2.0.8",
+    "scikit-learn>=1.6.1",
 ]
 
 [project.optional-dependencies]
