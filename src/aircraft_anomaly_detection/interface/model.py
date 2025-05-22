@@ -2,6 +2,8 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 import numpy as np
+import numpy.typing as npt
+import torch
 from PIL import Image
 
 from aircraft_anomaly_detection.schemas import Annotation
@@ -100,3 +102,22 @@ class ModelInterface(ABC):
         else:
             raise ValueError("input_image must be a file path (str), a PIL.Image.Image, or a numpy.ndarray.")
         return image
+
+
+class SaliencyModelInterface(ABC):
+    """Interface for saliency-based anomaly reasoning models."""
+
+    @abstractmethod
+    def generate_saliency_map(self, image: Image.Image) -> torch.Tensor:
+        """Compute an anomaly saliency map for the input image.
+
+        Args:
+            image: An RGB image for which to compute saliency.
+
+        Returns:
+            torch.Tensor: A float32 tensor of shape (C, H, W), where
+                C is the number of channels, H is the height, and
+                W is the width of the image. Higher values indicate
+                more anomalous or salient regions.
+        """
+        raise NotImplementedError

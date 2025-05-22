@@ -1,4 +1,5 @@
 from os import PathLike
+from typing import Any
 
 import matplotlib.patches as patches
 import matplotlib.pyplot as plt
@@ -7,12 +8,19 @@ import torch
 from PIL import Image
 from transformers import OwlViTForObjectDetection, OwlViTProcessor
 
-from ..interfaces import Annotation, ModelInterface
+from aircraft_anomaly_detection.interface.model import ModelInterface
+from aircraft_anomaly_detection.schemas.data import Annotation
 
 
 class OwlViT(ModelInterface):
     def __init__(
-        self, pretrained_model_name_or_pat: str | PathLike = "google/owlvit-base-patch32", device: str | None = None
+        self,
+        pretrained_model_name_or_pat: str | PathLike = "google/owlvit-base-patch32",
+        device: str | None = None,
+        text_prompts: list[list[str]] = [["a clean, undamaged metal surface", "a close-up image of a metal scratch"]],
+        undamaged_idxes: list[int] = [0],
+        threshold: float = 0.01,
+        top_k: int = 2,
     ) -> None:
         """
         Initialize the OwlViT model from Hugging Face.
@@ -25,15 +33,15 @@ class OwlViT(ModelInterface):
         self.processor = OwlViTProcessor.from_pretrained(pretrained_model_name_or_pat)
         self.model = OwlViTForObjectDetection.from_pretrained(pretrained_model_name_or_pat).to(self.device)
 
+        self.text_prompts: list[list[str]] = text_prompts
+        self.undamaged_idxes: list[int] = undamaged_idxes
+        self.threshold: float = threshold
+        self.top_k: int = top_k
+
     def predict(
         self,
         input_image: str | Image.Image | np.ndarray,
-        *,
-        text_prompts: list[list[str]] = [["a clean, undamaged metal surface", "a close-up image of a metal scratch"]],
-        undamaged_idxes: list[int] = [0],
-        threshold: float = 0.01,
-        top_k: int = 2,
-        **kwargs,
+        **kwargs: dict[str, Any],
     ) -> Annotation:
         """
         Run prediction on an image and return results as an Annotation.
@@ -46,29 +54,30 @@ class OwlViT(ModelInterface):
             top_k (int, optional): Number of top predictions to keep.
 
         Returns:
-            Annotation: label=True with bboxes, scores, bboxes_labels if defects found; otherwise label=False and empty lists.
+            Annotation: label=True with bboxes, scores, bboxes_labels if defects found;
+                otherwise label=False and empty lists.
         """
-        image = self._load_image(input_image)
-        inputs = self.processor(text=text_prompts, images=image, return_tensors="pt").to(self.device)
+        image = self.load_image(input_image)
+        inputs = self.processor(text=self.text_prompts, images=image, return_tensors="pt").to(self.device)
         outputs = self.model(**inputs)
 
         target_sizes = torch.Tensor([image.size[::-1]]).to(self.device)
         results = self.processor.post_process_grounded_object_detection(
             outputs=outputs,
-            threshold=threshold,
+            threshold=self.threshold,
             target_sizes=target_sizes,
         )
         result = results[0]
 
         boxes, scores, labels_str = self._filter_boxes(
-            result["boxes"], result["scores"], result["labels"], undamaged_idxes, top_k, text_prompts
+            result["boxes"], result["scores"], result["labels"], self.undamaged_idxes, self.top_k, self.text_prompts
         )
 
         if boxes.size and scores:
             ann = Annotation(
                 image=image,
                 damaged=True,
-                bboxes=boxes.tolist(),
+                bboxes=boxes.astype(np.float32).tolist(),  # type: ignore
                 scores=scores,
                 bboxes_labels=labels_str,
                 mask=self.box_to_mask(image, boxes),
@@ -78,59 +87,6 @@ class OwlViT(ModelInterface):
                 image=image, damaged=False, bboxes=[], scores=[], bboxes_labels=[], mask=self.box_to_mask(image, boxes)
             )
         return ann
-
-    def plot(
-        self,
-        ann: Annotation,
-        title: str = "OwlViT Predictions",
-    ) -> None:
-        """
-        Draws bounding boxes and labels from an Annotation.
-        """
-        image = ann.image
-        boxes = np.array(ann.bboxes)
-        labels = ann.bboxes_labels or []
-        scores = ann.scores or []
-
-        _, ax = plt.subplots(1, figsize=(6, 6))
-        ax.imshow(image)
-        plt.axis("off")
-        plt.title(title)
-
-        if len(boxes):
-            for idx, box in enumerate(boxes):
-                x1, y1, x2, y2 = [max(0, v) for v in box.tolist()]
-                width, height = x2 - x1, y2 - y1
-
-                rect = patches.Rectangle((x1, y1), width, height, linewidth=2, edgecolor="red", facecolor="none")
-                ax.add_patch(rect)
-
-                label_text = f"{labels[idx]} ({scores[idx]:.2f})"
-                ax.text(x1, y1 - 10, label_text, color="red", fontsize=12, backgroundcolor="white")
-        else:
-            print("No defect found")
-
-    # ------------------------------------------HELPER FUNCTIONS------------------------------------------#
-
-    def _load_image(self, input_image: str | Image.Image | np.ndarray) -> Image.Image:
-        """
-        Load an image from a file path, a numpy array, or a PIL image, and return a PIL Image in RGB.
-
-        Args:
-            input_image (Union[str, Image.Image, np.ndarray]): Image file path, numpy array, or PIL Image.
-
-        Returns:
-            Image.Image: Loaded image in RGB mode.
-        """
-        if isinstance(input_image, str):
-            image = Image.open(input_image).convert("RGB")
-        elif isinstance(input_image, Image.Image):
-            image = input_image.convert("RGB")
-        elif isinstance(input_image, np.ndarray):
-            image = Image.fromarray(np.uint8(input_image)).convert("RGB")
-        else:
-            raise ValueError("input_image must be a file path (str), a PIL.Image.Image, or a numpy.ndarray.")
-        return image
 
     def _filter_boxes(
         self,

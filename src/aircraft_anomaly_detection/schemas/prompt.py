@@ -12,13 +12,19 @@ class PromptPair:
 
 @dataclass
 class ObjectPrompt:
-    """Structured replacement for the old English sentence."""
+    """Prompt for a specific object instance."""
 
     name: str
-    count: int  # N
     max_anomalies: int  # k_mask
     anomaly_area_ratio: float  # e.g. 0.3
+    count: int = 1  # N
+    proposed_object_min_area: float = 0.3  # e.g. 0.3
+    proposed_object_max_area: float = 1.0
 
     @property
     def object_max_area(self) -> float:
-        return 1.0 / self.count
+        return max(1.0 / self.count, self.proposed_object_max_area)
+
+    @property
+    def object_min_area(self) -> float:
+        return self.proposed_object_min_area

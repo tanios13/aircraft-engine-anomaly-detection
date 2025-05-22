@@ -111,7 +111,7 @@ class SamSegmentorHF(SegmentorInterface):
             torch.arange(num_boxes, device=masks.device),
             best_mask_idxs_cpu,
         ]
-        masks_final_np = np.array(selected_best_masks, dtype=np.uint8)
+        masks_final_np = np.array(selected_best_masks, dtype=np.uint8, copy=True)
 
         return masks_final_np
 
