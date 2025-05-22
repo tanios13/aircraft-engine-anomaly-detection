@@ -20,6 +20,8 @@ dependencies = [
     "tqdm>=4.67.1",
     "pycocotools>=2.0.8",
     "scikit-learn>=1.6.1",
+    "timm>=1.0.15",
+    "typing-extensions>=4.13.1",
 ]
 
 [project.optional-dependencies]

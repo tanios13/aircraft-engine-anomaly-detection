@@ -2,18 +2,25 @@ from collections.abc import Sequence
 from itertools import compress
 from typing import Any, Literal
 
+import cv2
 import numpy as np
 import torch
 from PIL import Image
 
-from aircraft_anomaly_detection.interface.model import DetectorInterface, ModelInterface, SegmentorInterface
-from aircraft_anomaly_detection.models.saa import dino, sam
+from aircraft_anomaly_detection.interface.model import (
+    DetectorInterface,
+    ModelInterface,
+    SaliencyModelInterface,
+    SegmentorInterface,
+)
+from aircraft_anomaly_detection.models.saa import dino, sam, widenet
 from aircraft_anomaly_detection.models.saa.utils import box_area_xyxy, cxcywh_to_xyxy, nms_xyxy
 from aircraft_anomaly_detection.schemas import Annotation, ObjectPrompt, PromptPair
 from aircraft_anomaly_detection.viz_utils import draw_annotation
 
 RegionProposalModelType = Literal["GroundingDINO"] | DetectorInterface
 RegionRefinerModelType = Literal["SAM"] | SegmentorInterface
+SaliencyModelType = Literal["ModelINet"] | SaliencyModelInterface
 
 
 class SAA(ModelInterface):
@@ -23,10 +30,12 @@ class SAA(ModelInterface):
         self,
         region_proposal_model: RegionProposalModelType,
         region_refiner_model: RegionRefinerModelType,
+        saliency_model: SaliencyModelType,
         box_threshold: float,
         text_threshold: float,
         region_proposal_model_config: dict[str, Any] = {},
         region_refiner_model_config: dict[str, Any] = {},
+        saliency_model_config: dict[str, Any] = {},
         device: str | None = None,
         **kwargs: dict[str, Any],
     ) -> None:
@@ -68,6 +77,18 @@ class SAA(ModelInterface):
             self.anomaly_region_refiner = region_refiner_model
         else:
             raise ValueError("region_refiner_model must be a string or a SegmentorInterface instance.")
+
+        if isinstance(saliency_model, str):
+            if saliency_model == "ModelINet":
+                self.feature_extractor: SaliencyModelInterface = widenet.ModelINet(
+                    backbone_name=saliency_model_config.get("model_id", "wide_resnet50_2"),
+                    resize_longest=saliency_model_config.get("resize_longest", 1024),
+                    device=device,
+                )
+        elif isinstance(saliency_model, SaliencyModelInterface):
+            self.feature_extractor = saliency_model
+        else:
+            raise ValueError("saliency_model must be a string or a SaliencyModelInterface instance.")
 
         # Set parameters
         self.box_threshold = box_threshold
@@ -250,7 +271,145 @@ class SAA(ModelInterface):
 
             _ = draw_annotation(image, ann, show_mask=True, show_boxes=True, save_path=debug_path)
 
-        return list(masks), scores_out, max_box_area
+        return list(masks), scores_out, max_box_area / (w * h)
+
+    def self_similarity_calculation(
+        self,
+        image: Image.Image,
+    ) -> np.ndarray:
+        """Calculate self-similarity for the given image and object masks.
+
+        Args:
+            image: The input image.
+            object_masks: The object masks.
+
+        Returns:
+            The self-similarity map.
+        """
+        resize_image = image.resize((256, 256))
+        features = self.feature_extractor.generate_saliency_map(resize_image)
+
+        C, H, W = features.shape
+        flattened_feats = features.view(C, H * W)
+
+        feat_sim = flattened_feats.T @ flattened_feats  # (4096, 4096) cosine-sim
+        feat_sim = 0.5 * (1 - feat_sim)  # convert to *distance* maps [−1…1] → [1…0]
+
+        topk_vals, _ = torch.topk(feat_sim, k=400, dim=1, largest=True, sorted=False)
+        heat_map = topk_vals.mean(dim=1).view(H, W).cpu().numpy()
+
+        mask_anomaly_scores = cv2.resize(heat_map, (image.height, image.width))
+        return mask_anomaly_scores
+
+    def multiple_object_similarity(
+        self,
+        image: Image.Image,
+        object_masks: list[np.ndarray],
+    ) -> np.ndarray:
+        """Calculate self-similarity for the given image and object masks.
+
+        Args:
+            image: The input image.
+            object_masks: The object masks.
+
+        Returns:
+            The self-similarity map.
+        """
+        resize_image = image.resize((1024, 1024))
+        feats = self.feature_extractor.generate_saliency_map(resize_image)
+
+        # get the features of the image
+        C, H, W = feats.shape
+        feat_size = (H, W)
+
+        resized_obj_masks = []
+        for obj_mask in object_masks:
+            new_obj_mask = obj_mask.astype(np.int32)
+            resized_obj_mask = cv2.resize(new_obj_mask, feat_size, interpolation=cv2.INTER_NEAREST)
+            resized_obj_masks.append(resized_obj_mask)
+
+        mask_anomaly_scores = []
+        for indx in range(len(resized_obj_masks)):
+            other_obj_masks = resized_obj_masks[:indx] + resized_obj_masks[indx + 1 :]
+            target_obj_mask = resized_obj_masks[indx]
+
+            one_mask_feature, one_feature_location, other_mask_features = self.region_feature_extraction(
+                feats, target_obj_mask, other_obj_masks
+            )
+
+            similarity = one_mask_feature @ other_mask_features.T  # (H*W, N)
+            similarity = similarity.max(dim=1)[0]
+            anomaly_score = 0.5 * (1.0 - similarity)
+            anomaly_score = anomaly_score.cpu().numpy()
+
+            mask_anomaly_score = np.zeros(feature_size)
+            for location, score in zip(one_feature_location, anomaly_score):
+                mask_anomaly_score[location[0], location[1]] = score
+
+            mask_anomaly_scores.append(mask_anomaly_score)
+
+        mask_anomaly_scores = np.stack(mask_anomaly_scores, axis=0)
+        mask_anomaly_scores = np.max(mask_anomaly_scores, axis=0)
+        mask_anomaly_scores = cv2.resize(mask_anomaly_scores, (image.shape[1], image.shape[0]))
+
+        return mask_anomaly_scores
+
+    def region_feature_extraction(
+        self, features: torch.Tensor, target_obj_mask: np.ndarray, other_obj_masks: list[np.ndarray]
+    ) -> tuple[torch.Tensor, np.ndarray, torch.Tensor]:
+        """Extract feature vectors for a target mask and its complement regions.
+
+        Given a feature map and a binary mask of one object region, zero out
+        those features and collect
+          1. The features and positions of the masked pixels.
+          2. The features of all pixels belonging to the other object masks.
+
+        Args:
+            features: A tensor of shape (C, H, W)
+            one_object_mask: A binary mask of shape (H, W) for the target object.
+            other_object_masks: A list of binary masks, each of shape (H, W),
+                representing other object regions.
+
+        Returns:
+            one_mask_feature: Tensor of shape (N1, C), where N1 is the number of
+                pixels in `one_object_mask`. Each row is the C-dim feature vector
+                at that location.
+            one_feature_locations: NumPy array of shape (N1, 2), giving (row, col)
+                coordinates of each pixel in the target mask.
+            other_mask_features: Tensor of shape (N2, C), concatenated feature
+                vectors of all pixels in `other_object_masks`, where N2 is the
+                total count over all other masks.
+        """
+        C, H, W = features.shape
+        feat = features.clone()
+
+        # Flatten spatial dims for easy indexing
+        feat_flat = feat.view(C, -1)  # shape: (C, H*W)
+        mask_flat = target_obj_mask.ravel()  # shape: (H*W,)
+
+        # 1) Extract features & positions for the target mask
+        non_zero_idx = np.nonzero(mask_flat)[0]  # indices of mask pixels
+        one_mask_feature = feat_flat[:, non_zero_idx].T  # shape: (N1, C)
+        # Convert flat indices to (row, col)
+        one_feature_locations = np.vstack((non_zero_idx // W, non_zero_idx % W)).T  # shape: (N1, 2)
+
+        # Zero out those features in the feature map
+        feat_flat[:, idx1] = 0
+
+        # 2) Extract features for all other masks
+        other_features = []
+        for om in other_obj_masks:
+            om_flat = om.ravel().astype(bool)
+            idx_other = np.nonzero(om_flat)[0]
+            if idx_other.size > 0:
+                other_features.append(feat_flat[:, idx_other])
+
+        if other_features:
+            other_mask_features = torch.cat(other_features, dim=1).T  # (N2, C)
+        else:
+            other_mask_features = torch.empty((0, C), device=features.device)
+
+        return one_mask_feature, one_feature_locations, other_mask_features
 
 
 #                  dino_config_file,
