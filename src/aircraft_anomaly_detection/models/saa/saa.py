@@ -566,7 +566,7 @@ class SAA(ModelInterface):
         Args:
             defect_masks: Sequence of HxW boolean masks for each defect region.
             defect_scores: Sequence of floats corresponding to each mask's score.
-            k:            Number of highest-scoring masks to keep. If None, uses self.k_mask.
+            k: Number of highest-scoring masks to keep. If None, uses self.k_mask.
 
         Returns:
             An H_outxW_out anomaly map (float32) where H_out=W_out=self.out_size.
