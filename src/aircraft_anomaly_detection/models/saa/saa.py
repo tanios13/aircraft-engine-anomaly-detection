@@ -163,7 +163,7 @@ class SAA(ModelInterface):
             colored_map = cv2.applyColorMap(heatmap_uint8, cv2.COLORMAP_JET)
 
             # save the colored heatmap
-            cv2.imwrite(debug_path_3, colored_map)
+            cv2.imwrite(debug_path_3, colored_map)  # type: ignore
 
         # rescoring
         rescored_defect_scores = self.rescore(
