@@ -89,7 +89,7 @@ class Evaluator:
 
         results_table = pd.DataFrame({"y_true": y_true, "y_pred": y_pred, "y_scores": y_probs})
         results_table.to_csv(save_path, index=True)
-        print("Results table saved to : {save_path}")
+        print(f"Results table saved to : {save_path}")
 
     def IoU(self):
         """
