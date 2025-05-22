@@ -162,7 +162,9 @@ class ModelINet(SaliencyModelInterface):
         ratio_w = img.shape[1] / self.resize_longest
 
         # ---- backbone forward -------------------------------------------
-        feats: Iterable[torch.Tensor] = self.backbone(x)
+        with torch.no_grad():
+            # get features from all stages
+            feats: Iterable[torch.Tensor] = self.backbone(x)
         feats = list(feats)
         # upsample deeper maps to shallow map size and concat
         base_size = feats[0].shape[-2:]

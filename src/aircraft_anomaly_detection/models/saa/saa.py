@@ -154,7 +154,16 @@ class SAA(ModelInterface):
             self_similarity_map = self.self_similarity_calculation(image)
 
         if debug_path_3 := kwargs.get("debug_path_3", "3_self_similarity.png"):
-            cv2.imwrite(debug_path_3, (self_similarity_map * 255).astype(np.uint8))  # type: ignore
+            # normalize self_similarity_map to [0,1]
+            min_val, max_val = self_similarity_map.min(), self_similarity_map.max()
+            norm_map = (self_similarity_map - min_val) / (max_val - min_val + 1e-8)
+
+            # convert to 8-bit and apply blue-to-red colormap
+            heatmap_uint8 = (norm_map * 255).astype(np.uint8)
+            colored_map = cv2.applyColorMap(heatmap_uint8, cv2.COLORMAP_JET)
+
+            # save the colored heatmap
+            cv2.imwrite(debug_path_3, colored_map)
 
         # rescoring
         rescored_defect_scores = self.rescore(
@@ -171,10 +180,8 @@ class SAA(ModelInterface):
             defect_scores=rescored_defect_scores,
             k=self._obj_prompt.max_anomalies,
         )
-        if debug_path_4 := kwargs.get("debug_path_4", "4_anomaly_map.png"):
-            cv2.imwrite(debug_path_4, (anomaly_map * 255).astype(np.uint8))  # type: ignore
 
-        return Annotation(
+        result = Annotation(
             image=image,
             damaged=True if max(rescored_defect_scores) > 0.0 else False,
             bboxes=[mask_to_box(mask) for mask in defect_masks],
@@ -182,6 +189,11 @@ class SAA(ModelInterface):
             bboxes_labels=defect_labels,
             mask=anomaly_map,
         )
+
+        if debug_path_4 := kwargs.get("debug_path_4", "4_anomaly_map.png"):
+            draw_annotation(image, result, show_mask=True, show_boxes=True, save_path=debug_path_4)  # type: ignore
+
+        return result
 
     def set_ensemble_prompts(self, prompts: Sequence[PromptPair]) -> None:
         """Register the prompts that drive Grounding DINO.

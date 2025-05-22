@@ -19,6 +19,7 @@ def test_saa_instantiation() -> None:
         model = SAA(
             region_proposal_model="GroundingDINO",
             region_refiner_model="SAM",
+            saliency_model="ModelINet",
             box_threshold=0.2,
             text_threshold=0.2,
         )
@@ -58,6 +59,7 @@ def test_saa_predict() -> None:
     model = SAA(
         region_proposal_model="GroundingDINO",  # Placeholder or actual model key
         region_refiner_model="SAM",  # Placeholder or actual model key
+        saliency_model="ModelINet",
         box_threshold=0.2,
         text_threshold=0.2,
     )
