@@ -39,6 +39,7 @@ class SAA(ModelInterface):
         region_refiner_model_config: dict[str, Any] = {},
         saliency_model_config: dict[str, Any] = {},
         device: str | None = None,
+        debug: bool = False,
         **kwargs: dict[str, Any],
     ) -> None:
         """
@@ -97,8 +98,23 @@ class SAA(ModelInterface):
         self.text_threshold = text_threshold
 
         # Set prompts parameters
-        self._prompt_pairs: Sequence[PromptPair] = []
-        self._obj_prompt: ObjectPrompt | None = None
+        if kwargs.get("prompt_pairs"):
+            try:
+                self.set_ensemble_prompts([PromptPair(target=p[0], background=p[1]) for p in kwargs["prompt_pairs"]])
+            except Exception as e:
+                raise ValueError(f"Invalid prompt pairs: {kwargs['prompt_pairs']}") from e
+        else:
+            self._prompt_pairs: Sequence[PromptPair] = []
+        if kwargs.get("object_prompt"):
+            try:
+                self._obj_prompt: ObjectPrompt | None = ObjectPrompt(**kwargs["object_prompt"])
+            except Exception as e:
+                raise ValueError(f"Invalid object prompt: {kwargs['object_prompt']}") from e
+        else:
+            self._obj_prompt: ObjectPrompt | None = None
+
+        # debug flag
+        self.debug = debug
 
         # nms
         self.nms_iou_thr: float = kwargs.get("nms_iou_thr", 0.5)  # type: ignore
@@ -128,7 +144,7 @@ class SAA(ModelInterface):
             box_thr=self.box_threshold,
             text_thr=self.text_threshold,
             nms_iou_thr=self.nms_iou_thr,
-            debug_path=kwargs.get("debug_path_1", "1_object.png"),  # type: ignore
+            debug_path=kwargs.get("debug_path_1", "1_object.png") if self.debug else "",  # type: ignore
         )
         if len(obj_masks) > 0:
             defect_max_area = obj_area * self._obj_prompt.anomaly_area_ratio
@@ -144,7 +160,7 @@ class SAA(ModelInterface):
             text_thr=self.text_threshold,
             area_min=defect_min_area,
             area_max=defect_max_area,
-            debug_path=kwargs.get("debug_path_2", "2_defect.png"),  # type: ignore
+            debug_path=kwargs.get("debug_path_2", "2_defect.png") if self.debug else "",  # type: ignore
         )
 
         # saliency map (self-similarity)
@@ -153,7 +169,7 @@ class SAA(ModelInterface):
         else:
             self_similarity_map = self.self_similarity_calculation(image)
 
-        if debug_path_3 := kwargs.get("debug_path_3", "3_self_similarity.png"):
+        if self.debug and (debug_path_3 := kwargs.get("debug_path_3", "3_self_similarity.png")):
             # normalize self_similarity_map to [0,1]
             min_val, max_val = self_similarity_map.min(), self_similarity_map.max()
             norm_map = (self_similarity_map - min_val) / (max_val - min_val + 1e-8)
@@ -183,14 +199,14 @@ class SAA(ModelInterface):
 
         result = Annotation(
             image=image,
-            damaged=True if max(rescored_defect_scores) > 0.0 else False,
+            damaged=True if len(rescored_defect_scores) == 0 or max(rescored_defect_scores) > 0.0 else False,
             bboxes=[mask_to_box(mask) for mask in defect_masks],
             scores=rescored_defect_scores,
             bboxes_labels=defect_labels,
             mask=anomaly_map,
         )
 
-        if debug_path_4 := kwargs.get("debug_path_4", "4_anomaly_map.png"):
+        if self.debug and (debug_path_4 := kwargs.get("debug_path_4", "4_anomaly_map.png")):
             draw_annotation(image, result, show_mask=True, show_boxes=True, save_path=debug_path_4)  # type: ignore
 
         return result
@@ -297,8 +313,8 @@ class SAA(ModelInterface):
             max_box_area = max(max_box_area, box_area_xyxy(boxes_t).max().item())
 
         if not all_boxes:
-            empty_mask = np.zeros((h, w), dtype=bool)
-            return [empty_mask], [0.0], 1.0, [""]
+            # empty_mask = np.zeros((h, w), dtype=bool)
+            return [], [], 1.0, []
 
         # 3️⃣ Stack, convert to XYXY abs, NMS
         boxes_xyxy = torch.cat(all_boxes, dim=0)
@@ -352,7 +368,7 @@ class SAA(ModelInterface):
         topk_vals, _ = torch.topk(feat_sim, k=400, dim=1, largest=True, sorted=False)
         heat_map = topk_vals.mean(dim=1).view(H, W).cpu().numpy()
 
-        mask_anomaly_scores = cv2.resize(heat_map, (image.height, image.width))
+        mask_anomaly_scores = cv2.resize(heat_map, (image.width, image.height))
         return mask_anomaly_scores
 
     def multiple_object_similarity(
@@ -578,6 +594,10 @@ class SAA(ModelInterface):
         # Validate inputs
         if len(defect_masks) != len(defect_scores):
             raise ValueError(f"Number of masks ({len(defect_masks)}) and scores ({len(defect_scores)}) must match.")
+
+        # return if empty score array
+        if len(defect_masks) == 0:
+            return np.zeros((image.height, image.width), dtype=np.float32)
 
         # Pick top‐k indices
         scores_arr = np.array(defect_scores, dtype=float)

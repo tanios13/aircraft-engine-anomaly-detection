@@ -1,0 +1,20 @@
+region_proposal_model: "GroundingDINO"
+region_refiner_model: "SAM"
+saliency_model: "ModelINet"
+box_threshold: 0.3
+text_threshold: 0.3
+object_prompt:
+  name: metallic surface
+  max_anomalies: 3 # k_mask
+  anomaly_area_ratio: 0.1 # e.g. 0.3
+  count: 1 # N
+  proposed_object_min_area: 0.2
+  proposed_object_max_area: 0.9
+prompt_pairs:
+  - ["defect", "metal"]
+  - ["scratch", "metal"]
+  - ["dent", "metal"]
+  - ["nick", "metal"]
+  - ["crack", "metal"]
+  - ["chip", "metal"]
+debug: true

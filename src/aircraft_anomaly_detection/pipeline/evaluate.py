@@ -128,6 +128,8 @@ def refine_annotation(annotation: Annotation, background_mask: np.ndarray) -> No
     valid_bbox_idx = []
     for i in range(len(annotation.bboxes)):
         x1, y1, x2, y2 = annotation.bboxes[i]
+        if x1 == x2 or y1 == y2:
+            continue
         area = (x2 - x1) * (y2 - y1)
         background_area = np.sum(background_mask[y1:y2, x1:x2])
         if background_area / area < 0.5:
