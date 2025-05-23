@@ -244,12 +244,18 @@ def visualize_mask_overlap_with_image(
     mask2: np.ndarray,
     title: str = "Mask Overlap",
     save_path: str | Path | None = None,
+    ax: plt.Axes | None = None,
 ) -> None:
     """
     Show a PIL image with overlaid ground truth and predicted masks,
     Show a PIL image with overlaid ground truth and predicted masks,
     and display a legend explaining the colors.
     """
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(8, 8))
+    else:
+        fig = ax.figure  # type: ignore
+
     image_np = np.array(image.convert("RGB")) / 255.0  # Normalize to [0, 1]
     height, width = mask1.shape
 
@@ -271,11 +277,11 @@ def visualize_mask_overlap_with_image(
     overlay[intersection] = yellow
 
     # Plot
-    plt.figure(figsize=(8, 8))
-    plt.imshow(image_np)
-    plt.imshow(overlay, alpha=0.4)
-    plt.title(title)
-    plt.axis("off")
+    # ax.figure(figsize=(8, 8))
+    ax.imshow(image_np)
+    ax.imshow(overlay, alpha=0.4)
+    ax.set_title(title)
+    ax.axis("off")
 
     # Legend
     legend_patches = [
@@ -283,7 +289,45 @@ def visualize_mask_overlap_with_image(
         Patch(color="green", label="Ground truth only"),
         Patch(color="yellow", label="Intersection"),
     ]
-    plt.legend(handles=legend_patches, loc="upper right")
+    ax.legend(handles=legend_patches, loc="upper right")
+
+    if save_path:
+        fig.savefig(save_path, bbox_inches="tight")
+        plt.close(fig)
+
+    return ax
+
+
+def visualize_bb_predictions(
+    image: Image.Image,
+    gt_annotation: Annotation,
+    pred_annotation: Annotation,
+    cmap: Iterable[str] | None = None,
+    save_path: str | Path | None = None,
+) -> None:
+    fig, ax = plt.subplots(figsize=(10, 10))
+
+    # Draw predicted annotations
+    draw_annotation(
+        image,
+        pred_annotation,
+        show_boxes=True,
+        show_mask=False,
+        cmap=cmap,
+        ax=ax,
+    )
+
+    # Draw ground truth masks
+    pred_label = "Damaged" if pred_annotation.damaged else "Normal"
+    true_label = "Damaged" if gt_annotation.damaged else "Normal"
+    intersection = (gt_annotation.mask & pred_annotation.mask).sum()
+    union = (gt_annotation.mask | pred_annotation.mask).sum()
+    iou = intersection / union if union > 0.0 else 0.0
+    title = f"Pred: {pred_label}, True: {true_label}, IoU: {iou:0.4f}"
+
+    visualize_mask_overlap_with_image(
+        image, gt_annotation.mask, pred_annotation.mask, ax=ax, title=title, save_path=None
+    )
 
     if save_path:
         plt.savefig(save_path, bbox_inches="tight")

@@ -2,6 +2,7 @@ import os
 from collections.abc import Callable
 from types import SimpleNamespace
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import tqdm
@@ -11,7 +12,7 @@ from aircraft_anomaly_detection.dataloader.loader import AnomalyDataset
 from aircraft_anomaly_detection.eval.evaluator import Evaluator
 from aircraft_anomaly_detection.interface.model import ModelInterface
 from aircraft_anomaly_detection.schemas.data import Annotation
-from aircraft_anomaly_detection.viz_utils import visualize_mask_overlap_with_image
+from aircraft_anomaly_detection.viz_utils import visualize_bb_predictions, visualize_mask_overlap_with_image
 
 
 def evaluate(
@@ -40,6 +41,7 @@ def evaluate(
 
     print("Predicting...")
 
+    cmap = plt.rcParams["axes.prop_cycle"].by_key()["color"]
     for i in tqdm.tqdm(range(len(dataset))):
         image, label, metadata = dataset[i]
         grd_annotation_list.append(metadata.annotation)
@@ -65,11 +67,8 @@ def evaluate(
         if output_dir is not None and not os.path.exists(output_dir):
             os.makedirs(output_dir, exist_ok=True)
 
-        visualize_mask_overlap_with_image(
-            no_background_image,
-            metadata.annotation.mask,
-            pred_annotation.mask,
-            save_path=output_dir + f"image_{i}.png",
+        visualize_bb_predictions(
+            no_background_image, metadata.annotation, pred_annotation, cmap, save_path=output_dir + f"image_{i}.png"
         )
 
     print("Evaluating...")
@@ -132,12 +131,13 @@ def refine_annotation(annotation: Annotation, background_mask: np.ndarray) -> No
         if x1 == x2 or y1 == y2:
             continue
         area = (x2 - x1) * (y2 - y1)
-        background_area = np.sum(background_mask[y1:y2, x1:x2])
+        background_area = background_mask[y1:y2, x1:x2].sum()
         if background_area / area < 0.5:
             valid_bbox_idx.append(i)
     print(f"Refinement: removed {len(annotation.bboxes) - len(valid_bbox_idx)} boxes from {len(annotation.bboxes)}")
     annotation.bboxes = [annotation.bboxes[i] for i in valid_bbox_idx]
     annotation.scores = [annotation.scores[i] for i in valid_bbox_idx]
+    assert len(annotation.bboxes) == len(valid_bbox_idx) and len(annotation.scores) == len(valid_bbox_idx)
 
     if annotation.mask is not None:
         annotation.box_to_mask()
