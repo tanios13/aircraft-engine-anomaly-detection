@@ -3,6 +3,7 @@ import pytest
 from sympy import im
 
 from aircraft_anomaly_detection.dataloader import AnomalyDataset
+from aircraft_anomaly_detection.models.saa.owlvit import OwlViT
 from aircraft_anomaly_detection.models.saa.saa import SAA
 from aircraft_anomaly_detection.schemas import Annotation, ObjectPrompt, PromptPair
 from aircraft_anomaly_detection.viz_utils import draw_annotation
@@ -16,11 +17,12 @@ def test_saa_instantiation() -> None:
     this test might fail and would need adjustment based on ModelInterface's definition.
     """
     try:
+        region_proposal_model = OwlViT()
         model = SAA(
-            region_proposal_model="GroundingDINO",
+            region_proposal_model=region_proposal_model,
             region_refiner_model="SAM",
             saliency_model="ModelINet",
-            box_threshold=0.2,
+            box_threshold=0.01,
             text_threshold=0.2,
         )
         assert isinstance(model, SAA), "Object should be an instance of SAA"
@@ -52,15 +54,15 @@ def test_saa_predict() -> None:
     an abstract class or __init__ signature mismatch), or if `predict` is not
     implemented, the test will be skipped.
     """
-
+    region_proposal_model = OwlViT()
     # Instantiate SAA. For a focused unit test of predict() logic,
     # mock objects for region_proposal_model and region_refiner_model
     # would typically be injected here if SAA's __init__ supports them.
     model = SAA(
-        region_proposal_model="GroundingDINO",  # Placeholder or actual model key
+        region_proposal_model=region_proposal_model,  # Placeholder or actual model key
         region_refiner_model="SAM",  # Placeholder or actual model key
         saliency_model="ModelINet",
-        box_threshold=0.2,
+        box_threshold=0.00,
         text_threshold=0.2,
     )
 

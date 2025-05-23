@@ -6,6 +6,10 @@ import numpy as np
 import torch
 import torchvision
 import torchvision.transforms.functional as F
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
+
+from ..interface import Annotation, ModelInterface
 from PIL import Image
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 
