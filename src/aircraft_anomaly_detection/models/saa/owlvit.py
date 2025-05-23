@@ -45,31 +45,33 @@ class OwlViT(DetectorInterface):
             Tuple of bounding boxes, scores, and labels.
         """
         text = [prompt.strip().lower() for prompt in text_prompts]
-        print(f"Text prompts: {text}")
-        print(f"box_threshold: {box_threshold}")
-        inputs = self.processor(images=image, text=[text], return_tensors="pt").to(
+        inputs = self.processor(images=image, text=text, return_tensors="pt").to(
             self.device
         )
 
         with torch.no_grad():
             outputs = self.model(**inputs)
-        
-        #check how many outputs are there
-        print(f"Number of outputs: {len(outputs)}")
 
-
+        #
+        target_sizes = torch.Tensor([image.size[::-1]]).to(self.device)
         results = self.processor.post_process_grounded_object_detection(
             outputs=outputs,
             threshold=box_threshold,
-            target_sizes=[(image.height, image.width)],
+            target_sizes=target_sizes,
         )
-        #check how many results are there
-        print(f"Number of results: {len(results)}")
-        print(f"Results: {results}")
+        # check how many results are there
+
         result = results[0]
+
         boxes = result["boxes"].cpu().numpy().astype(int)
         scores = [score.item() for score in result["scores"]]
-        detected_labels = result["text_labels"]
-        #check if the detected labels are empty
+        detected_labels = [text[i] for i in result["labels"].cpu().numpy()]
+
+        sorted_indices = np.argsort(scores)[::-1]
+        boxes = boxes[sorted_indices][:3]
+        scores = [scores[i] for i in sorted_indices][:3]
+        detected_labels = [detected_labels[i] for i in sorted_indices][:3]
+
+        # check if the detected labels are empty
 
         return boxes, scores, detected_labels
