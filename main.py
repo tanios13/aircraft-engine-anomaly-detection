@@ -75,7 +75,9 @@ def run() -> None:
     """
     # Set up argument parser
     parser = argparse.ArgumentParser(description="Aircraft engine anomaly detection")
-    parser.add_argument("--config", type=str, default="main_config.yaml", help="Path to configuration YAML file")
+    parser.add_argument(
+        "--config", type=str, default="configs/main_config.yaml", help="Path to configuration YAML file"
+    )
     parser.add_argument("--model_config", type=str, help="Path to model configuration YAML file")
     args_cli = parser.parse_args()
 

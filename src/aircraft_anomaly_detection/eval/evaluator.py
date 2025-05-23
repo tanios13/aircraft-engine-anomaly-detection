@@ -97,14 +97,17 @@ class Evaluator:
         Computes the Intersection over Union (IoU) score for the binary masks.
         """
         self._check_masks()
-        intersection = 0
-        union = 0
+        total_iou = 0.0
+        count = 0
 
         for pred, gt in zip(self.predictions, self.ground_truth):
-            intersection += (pred.mask & gt.mask).sum()
-            union += (pred.mask | gt.mask).sum()
+            intersection = (pred.mask & gt.mask).sum()
+            union = (pred.mask | gt.mask).sum()
 
-        return intersection / union if union > 0 else 0.0
+            total_iou += intersection / union if union > 0 else 0.0
+            count += 1
+
+        return total_iou / count if count > 0 else 0.0
 
     def pixel_auroc(self):
         """
