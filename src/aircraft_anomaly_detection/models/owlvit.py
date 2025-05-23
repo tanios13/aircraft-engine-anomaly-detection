@@ -80,12 +80,10 @@ class OwlViT(ModelInterface):
                 bboxes=boxes.astype(np.int32).tolist(),  # type: ignore
                 scores=scores,
                 bboxes_labels=labels_str,
-                mask=self.box_to_mask(image, boxes),
+                mask=None,
             )
         else:
-            ann = Annotation(
-                image=image, damaged=False, bboxes=[], scores=[], bboxes_labels=[], mask=self.box_to_mask(image, boxes)
-            )
+            ann = Annotation(image=image, damaged=False, bboxes=[], scores=[], bboxes_labels=[], mask=None)
         return ann
 
     def _filter_boxes(
@@ -115,30 +113,3 @@ class OwlViT(ModelInterface):
             boxes_np, scores_list, labels_str = np.array([]), [], []
 
         return boxes_np, scores_list, labels_str
-
-    def box_to_mask(self, image: Image.Image, boxes: np.ndarray) -> np.ndarray:
-        """
-        Convert bounding boxes to a binary mask.
-
-        Args:
-            image (Image.Image): The input image.
-            boxes (np.ndarray): Array of bounding boxes (x0, y0, x1, y1).
-
-        Returns:
-            np.ndarray: Binary mask with 1s inside boxes, 0 elsewhere.
-        """
-        width, height = image.size
-        mask = np.zeros((height, width), dtype=np.uint8)
-
-        if boxes.size == 0:
-            return mask
-
-        for box in boxes:
-            x0, y0, x1, y1 = map(int, box)  # ensure integers
-            x0 = np.clip(x0, 0, width)
-            x1 = np.clip(x1, 0, width)
-            y0 = np.clip(y0, 0, height)
-            y1 = np.clip(y1, 0, height)
-            mask[y0:y1, x0:x1] = 1
-
-        return mask

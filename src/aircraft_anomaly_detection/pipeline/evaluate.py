@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import numpy as np
 import pandas as pd
 import tqdm
+from PIL import Image
 
 from aircraft_anomaly_detection.dataloader.loader import AnomalyDataset
 from aircraft_anomaly_detection.eval.evaluator import Evaluator
@@ -139,7 +140,7 @@ def refine_annotation(annotation: Annotation, background_mask: np.ndarray) -> No
     annotation.scores = [annotation.scores[i] for i in valid_bbox_idx]
 
     if annotation.mask is not None:
-        annotation.mask[(background_mask == 1)] = 0
+        annotation.box_to_mask()
 
     # TODO: add similar logic for mask annotations
     annotation.damaged = len(annotation.bboxes) > 0

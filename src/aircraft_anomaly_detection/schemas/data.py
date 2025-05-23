@@ -41,6 +41,42 @@ class Annotation:
             raise ValueError(
                 f"`bboxes` {len(self.bboxes)} must match `scores` {len(self.scores)} and `bboxes_labels` {len(self.bboxes_labels)}"
             )
+        if self.image is not None:
+            width, height = self.image.size
+        else:
+            width, height = int(1e6), int(1e6)
+
+        # Fixing negative bbox coordingates
+        for bbox in self.bboxes:
+            bbox[0] = np.clip(bbox[0], 0, width)
+            bbox[1] = np.clip(bbox[1], 0, width)
+            bbox[2] = np.clip(bbox[2], 0, height)
+            bbox[3] = np.clip(bbox[3], 0, height)
+        if self.image is not None and self.mask is None:
+            self.box_to_mask()
+
+    def box_to_mask(self) -> None:
+        """
+        Convert bounding boxes to a binary mask.
+
+        Args:
+            image (Image.Image): The input image.
+            boxes (np.ndarray): Array of bounding boxes (x0, y0, x1, y1).
+
+        Returns:
+            np.ndarray: Binary mask with 1s inside boxes, 0 elsewhere.
+        """
+        image = self.image
+        width, height = image.size
+        self.mask = np.zeros((height, width), dtype=np.uint8)
+
+        for box in self.bboxes:
+            x0, y0, x1, y1 = map(int, box)  # ensure integers
+            x0 = np.clip(x0, 0, width)
+            x1 = np.clip(x1, 0, width)
+            y0 = np.clip(y0, 0, height)
+            y1 = np.clip(y1, 0, height)
+            self.mask[y0:y1, x0:x1] = 1
 
 
 class Metadata(BaseModel):
