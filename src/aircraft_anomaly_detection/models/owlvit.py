@@ -77,7 +77,7 @@ class OwlViT(ModelInterface):
             ann = Annotation(
                 image=image,
                 damaged=True,
-                bboxes=boxes.astype(np.float32).tolist(),  # type: ignore
+                bboxes=boxes.astype(np.int32).tolist(),  # type: ignore
                 scores=scores,
                 bboxes_labels=labels_str,
                 mask=self.box_to_mask(image, boxes),

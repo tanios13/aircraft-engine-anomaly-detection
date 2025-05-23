@@ -63,7 +63,7 @@ disallow_untyped_calls = true      # Flag calls to functions without type hints 
 disallow_subclassing_any = true    # Prevent subclassing untyped classes (e.g. from untyped libs)
 disallow_untyped_decorators = true # Prevent using decorators without type hints
 disallow_any_unimported = true     # Treat missing stubs as errors instead of Any
-allow_redefinition = true
+disable_error_code = 'no-redef'
 
 [tool.uv.sources]
 clip = { git = "https://github.com/openai/CLIP.git" }

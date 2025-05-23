@@ -30,7 +30,7 @@ class Annotation:
 
     image: Image.Image | None = None
     damaged: bool | None = None
-    bboxes: list[list[float]] = field(default_factory=list)
+    bboxes: list[list[int]] = field(default_factory=list)
     scores: list[float] = field(default_factory=list)
     bboxes_labels: list[str] = field(default_factory=list)
     mask: np.ndarray | None = None

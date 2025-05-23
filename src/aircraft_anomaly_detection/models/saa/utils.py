@@ -3,7 +3,7 @@ import torch
 import torchvision.ops as tv_ops
 
 Mask = np.ndarray | torch.Tensor  # H×W   bool / {0,255}
-Box = list[float]
+Box = list[int]
 
 
 def cxcywh_to_xyxy(boxes: torch.Tensor, w: int, h: int) -> torch.Tensor:
@@ -47,6 +47,6 @@ def mask_to_box(mask: Mask) -> Box:
         return [0.0, 0.0, 0.0, 0.0]  # empty mask
 
     ys, xs = np.where(mask_bool)
-    x_min, x_max = float(xs.min()), float(xs.max())
-    y_min, y_max = float(ys.min()), float(ys.max())
+    x_min, x_max = int(xs.min()), int(xs.max())
+    y_min, y_max = int(ys.min()), int(ys.max())
     return [x_min, y_min, x_max, y_max]

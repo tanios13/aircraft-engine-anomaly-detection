@@ -96,7 +96,7 @@ class AnomalyDataset:
 
                 # bbox
                 x, y, bw, bh = ann["bbox"]
-                bboxes.append([x, y, x + bw, y + bh])
+                bboxes.append([int(x), int(y), int(x + bw), int(y + bh)])
                 scores.append(float(ann.get("score", 1.0)))
                 labels_box.append(cat_name)
 
@@ -177,7 +177,7 @@ class AnomalyDataset:
 
                 # bbox
                 x, y, bw, bh = ann["bbox"]
-                bboxes.append([x, y, x + bw, y + bh])
+                bboxes.append([int(x), int(y), int(x + bw), int(y + bh)])
                 scores.append(float(ann.get("score", 1.0)))
                 labels_box.append(cat_name)
 
