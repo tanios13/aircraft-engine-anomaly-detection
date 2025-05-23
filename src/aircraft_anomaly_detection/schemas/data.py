@@ -49,8 +49,8 @@ class Annotation:
         # Fixing negative bbox coordingates
         for bbox in self.bboxes:
             bbox[0] = np.clip(bbox[0], 0, width)
-            bbox[1] = np.clip(bbox[1], 0, width)
-            bbox[2] = np.clip(bbox[2], 0, height)
+            bbox[2] = np.clip(bbox[2], 0, width)
+            bbox[1] = np.clip(bbox[1], 0, height)
             bbox[3] = np.clip(bbox[3], 0, height)
         if self.image is not None and self.mask is None:
             self.box_to_mask()
