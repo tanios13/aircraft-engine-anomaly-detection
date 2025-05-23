@@ -2,25 +2,25 @@ import os
 from collections.abc import Callable
 from types import SimpleNamespace
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import tqdm
 
 from aircraft_anomaly_detection.dataloader.loader import AnomalyDataset
 from aircraft_anomaly_detection.eval.evaluator import Evaluator
-from aircraft_anomaly_detection.interfaces import ModelInterface
+from aircraft_anomaly_detection.interface.model import ModelInterface
+from aircraft_anomaly_detection.schemas.data import Annotation
 from aircraft_anomaly_detection.viz_utils import visualize_mask_overlap_with_image
 
 
 def evaluate(
     dataset: AnomalyDataset,
     model: ModelInterface,
-    output_dir: str = None,
+    output_dir: str | None = None,
     background_remover: Callable | None = None,
     preprocessor: Callable | None = None,
     args: SimpleNamespace | None = None,
-):
+) -> None:
     """
     Evaluate the model on the given dataset.
 
@@ -121,7 +121,7 @@ def evaluate(
     evaluator.save_results_table(output_dir + "results_table.csv")
 
 
-def refine_annotation(annotation, background_mask):
+def refine_annotation(annotation: Annotation, background_mask: np.ndarray) -> None:
     """
     Removes rectangles with large background area.
     """

@@ -3,7 +3,8 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import ConfusionMatrixDisplay, accuracy_score, confusion_matrix, f1_score, roc_auc_score, roc_curve
 
-from ..interfaces import Annotation
+from aircraft_anomaly_detection.interface.model import ModelInterface
+from aircraft_anomaly_detection.schemas.data import Annotation
 
 
 class Evaluator:

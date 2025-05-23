@@ -1,6 +1,5 @@
 from collections.abc import Callable
 from multiprocessing import process
-from typing import List
 
 import cv2
 import numpy as np
@@ -9,7 +8,7 @@ from torch.functional import F
 from transformers import AutoProcessor, CLIPSegForImageSegmentation
 
 
-class CLIPBackgroundRemover(Callable):
+class CLIPBackgroundRemover:
     def __init__(
         self,
         background_text: str = "a background",
@@ -59,7 +58,7 @@ class CLIPBackgroundRemover(Callable):
         return output_image, resized_mask
 
 
-class PreProcessor(Callable):
+class PreProcessor:
     def __init__(self, options: list = []):
         self.options = options
         self.func_map = {
@@ -78,10 +77,10 @@ class PreProcessor(Callable):
         return mod_image
 
 
-############ Helpers ######################
+# Helpers ######################
 
 
-def clahe_gs(image : Image.Image) -> Image.Image:
+def clahe_gs(image: Image.Image) -> Image.Image:
     img_np = np.array(image)
     gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
 
@@ -92,7 +91,8 @@ def clahe_gs(image : Image.Image) -> Image.Image:
     # Convert back to PIL
     return Image.fromarray(enhanced)
 
-def clahe_rgb(image : Image.Image) -> Image.Image:
+
+def clahe_rgb(image: Image.Image) -> Image.Image:
     img_np = np.array(image)
     r, g, b = cv2.split(img_np)
     clahe = cv2.createCLAHE(clipLimit=4.0, tileGridSize=(16, 16))
@@ -106,6 +106,7 @@ def clahe_rgb(image : Image.Image) -> Image.Image:
     img_clahe = cv2.merge((r_clahe, g_clahe, b_clahe))
 
     return Image.fromarray(img_clahe)
+
 
 def lighting_normalization(image: Image.Image) -> Image.Image:
     img_np = np.array(image)
