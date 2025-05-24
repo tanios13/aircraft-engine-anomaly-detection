@@ -110,7 +110,7 @@ class Evaluator:
             intersection = (pred_mask & gt_mask).sum()
             union = (pred_mask | gt_mask).sum()
 
-            total_iou += intersection / union if union > 0 else 0.0
+            total_iou += intersection / union if union > 0 else 1.0
             count += 1
 
         return total_iou / count if count > 0 else 0.0
