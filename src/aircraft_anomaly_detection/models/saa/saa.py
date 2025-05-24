@@ -6,6 +6,7 @@ from typing import Any, Literal
 import cv2
 import numpy as np
 import torch
+from matplotlib.pyplot import box
 from PIL import Image
 
 from aircraft_anomaly_detection.interface.model import (
@@ -18,7 +19,7 @@ from aircraft_anomaly_detection.models.saa import dino, sam, widenet
 from aircraft_anomaly_detection.schemas import Annotation, ObjectPrompt, PromptPair
 from aircraft_anomaly_detection.viz_utils import draw_annotation
 
-from .utils import box_area_xyxy, mask_to_box, nms_xyxy
+from .utils import box_area_xyxy, mask_to_box, nms_xyxy, scale_box
 
 RegionProposalModelType = Literal["GroundingDINO"] | DetectorInterface
 RegionRefinerModelType = Literal["SAM"] | SegmentorInterface
@@ -122,6 +123,9 @@ class SAA(ModelInterface):
         # saliency
         self.scale: float = kwargs.get("scale", 3.0)  # type: ignore
 
+        # enlarge the bounding box
+        self.enlarge_scale: float = kwargs.get("enlarge_scale", 1.3)  # type: ignore
+
     def predict(self, input_image: str | Image.Image | np.ndarray, **kwargs: dict[str, Any]) -> Annotation:
         """
         Predict the anomaly map for the given image.
@@ -136,6 +140,7 @@ class SAA(ModelInterface):
             raise ValueError("Object prompt and defect prompts must be set before calling predict.")
 
         image = self.load_image(input_image)
+        print(f"Image size: {image.size}, image height: {image.height}, image width: {image.width}")
 
         # object segmentation
         obj_masks, obj_scores, obj_area, _ = self.ensemble_text_guided_mask_proposal(
@@ -148,6 +153,9 @@ class SAA(ModelInterface):
         )
         if len(obj_masks) > 0:
             defect_max_area = obj_area * self._obj_prompt.anomaly_area_ratio
+            print(
+                f"Object area: {obj_area}, defect max area: {defect_max_area}, object mask shape: {obj_masks[0].shape}"
+            )
         else:
             defect_max_area = self._obj_prompt.object_max_area * self._obj_prompt.anomaly_area_ratio
         defect_min_area = 0.0
@@ -163,11 +171,16 @@ class SAA(ModelInterface):
             debug_path=kwargs.get("debug_path_2", "2_defect.png") if self.debug else "",  # type: ignore
         )
 
+        if len(defect_masks) > 0:
+            print(f"Defect masks shape: {defect_masks[0].shape}, defect scores: {defect_scores}")
+
         # saliency map (self-similarity)
         if self._obj_prompt.count > 1 and len(obj_masks) > 1:
             self_similarity_map = self.multiple_object_similarity(image, object_masks=obj_masks)
         else:
             self_similarity_map = self.self_similarity_calculation(image)
+
+        print(f"Self-similarity map shape: {self_similarity_map.shape}")
 
         if self.debug and (debug_path_3 := kwargs.get("debug_path_3", "3_self_similarity.png")):
             # normalize self_similarity_map to [0,1]
@@ -258,7 +271,6 @@ class SAA(ModelInterface):
         """
 
         w, h = image.width, image.height
-        self.anomaly_region_refiner.set_image(image)  # encode once for speed
 
         all_boxes: list[torch.Tensor] = []
         all_scores: list[float] = []
@@ -289,6 +301,22 @@ class SAA(ModelInterface):
             )
             if det_boxes.size == 0:
                 continue
+
+            if self.debug and debug_path:
+                ann = Annotation(
+                    bboxes=det_boxes.tolist(),  # type: ignore
+                    scores=det_scores,
+                    bboxes_labels=det_phrases,
+                    mask=np.zeros((h, w), dtype=np.uint8),
+                )
+                # Save the image with bounding boxes and labels
+                _ = draw_annotation(
+                    image,
+                    ann,
+                    show_mask=False,
+                    show_boxes=True,
+                    save_path=f"{debug_path.split('.')[0]}_{pair.target}.png",
+                )
 
             boxes_t = torch.as_tensor(det_boxes, dtype=torch.float32)  # already XYXY abs
             scores_t = torch.as_tensor(det_scores, dtype=torch.float32)
@@ -324,24 +352,60 @@ class SAA(ModelInterface):
         boxes_xyxy = boxes_xyxy[keep_idx]
         scores_cat = scores_cat[keep_idx]
         pred_labels = [all_phrases[i] for i in keep_idx.cpu().tolist()]
-
-        # 4️⃣ Run the segmentor once for all kept boxes
-        masks = self.anomaly_region_refiner.predict(boxes_xyxy.cpu().numpy(), multimask_output=True)
         scores_out = scores_cat.tolist()
 
-        if len(debug_path):
-            from aircraft_anomaly_detection.viz_utils import draw_annotation  # local helper
+        # 4️⃣ Run the segmentor once for all kept boxes
+        all_masks: list[np.ndarray] = []
+        for box_xyxy in boxes_xyxy:
+            mask = np.zeros((h, w), dtype=np.uint8)
+            # Crop the image around the box with some enlargement
+            box_xyxy = box_xyxy.cpu().numpy().astype(np.int32)
+            scaled_box = scale_box(box_xyxy, self.enlarge_scale, w, h)
+            crop_image = image.crop(
+                (
+                    float(scaled_box[0]),
+                    float(scaled_box[1]),
+                    float(scaled_box[2]),
+                    float(scaled_box[3]),
+                )
+            )
 
+            # Transform original box coordinates to crop image coordinates
+            box_in_crop = [
+                [
+                    box_xyxy[0] - scaled_box[0],  # x1
+                    box_xyxy[1] - scaled_box[1],  # y1
+                    box_xyxy[2] - scaled_box[0],  # x2
+                    box_xyxy[3] - scaled_box[1],  # y2
+                ]
+            ]
+            box_in_crop_arr = np.array(box_in_crop, dtype=np.int32)
+            self.anomaly_region_refiner.set_image(crop_image)  # encode the cropped image
+            crop_mask = self.anomaly_region_refiner.predict(box_in_crop_arr, multimask_output=True).squeeze(0)
+
+            # Place the cropped mask back into the full-sized mask at the correct location
+            crop_h, crop_w = crop_mask.shape
+            x1, y1, x2, y2 = scaled_box
+            # Calculate the paste region dimensions
+            paste_w, paste_h = x2 - x1, y2 - y1
+            # Resize crop_mask if dimensions don't match (due to boundary clipping)
+            if paste_w != crop_w or paste_h != crop_h:
+                crop_mask = cv2.resize(crop_mask, (paste_w, paste_h), interpolation=cv2.INTER_NEAREST)
+            # Place the crop mask into the full mask
+            mask[y1:y2, x1:x2] = crop_mask
+            all_masks.append(mask)
+
+        if len(debug_path):
             ann = Annotation(
                 bboxes=boxes_xyxy.cpu().numpy().tolist(),  # type: ignore
                 scores=scores_out,
                 bboxes_labels=pred_labels,
-                mask=np.any(masks, axis=0).astype(np.uint8),
+                mask=np.any(np.stack(all_masks, axis=0), axis=0).astype(np.uint8),
             )
 
             _ = draw_annotation(image, ann, show_mask=True, show_boxes=True, save_path=debug_path)
 
-        return list(masks), scores_out, max_box_area / (w * h), pred_labels
+        return all_masks, scores_out, max_box_area / (w * h), pred_labels
 
     def self_similarity_calculation(
         self,

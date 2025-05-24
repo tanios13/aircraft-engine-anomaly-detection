@@ -1,6 +1,5 @@
 input: lufthansa
-model_name: owlvit
-model_path: google/owlvit-base-patch32
-output_path: data/results/owlvit/
+model_name: saa
+output_path: data/results/saa/
 remove_background: True
 preprocessing: ["clahe_rgb"]

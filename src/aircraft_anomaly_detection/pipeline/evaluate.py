@@ -12,7 +12,11 @@ from aircraft_anomaly_detection.dataloader.loader import AnomalyDataset
 from aircraft_anomaly_detection.eval.evaluator import Evaluator
 from aircraft_anomaly_detection.interface.model import ModelInterface
 from aircraft_anomaly_detection.schemas.data import Annotation
-from aircraft_anomaly_detection.viz_utils import visualize_bb_predictions, visualize_mask_overlap_with_image
+from aircraft_anomaly_detection.viz_utils import (
+    draw_annotation,
+    visualize_bb_predictions,
+    visualize_mask_overlap_with_image,
+)
 
 
 def evaluate(
@@ -45,6 +49,13 @@ def evaluate(
     for i in tqdm.tqdm(range(len(dataset))):
         image, label, metadata = dataset[i]
         grd_annotation_list.append(metadata.annotation)
+        _ = draw_annotation(
+            image,
+            metadata.annotation,
+            show_boxes=True,
+            show_mask=True,
+            save_path="0_orignal_annotated.png",
+        )
 
         # Remove background
         if background_remover is not None:
