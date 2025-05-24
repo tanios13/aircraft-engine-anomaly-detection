@@ -1,0 +1,3 @@
+text_prompts:  [["undamaged metal surface", "a close-up image of a scratch"]]
+undamaged_idxes: [0]
+top_k: 15

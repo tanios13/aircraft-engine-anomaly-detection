@@ -11,6 +11,7 @@ from PIL import Image
 from aircraft_anomaly_detection.dataloader.loader import AnomalyDataset
 from aircraft_anomaly_detection.eval.evaluator import Evaluator
 from aircraft_anomaly_detection.interface.model import ModelInterface
+from aircraft_anomaly_detection.postprocessing import BBoxOnObjectFilter, BBoxSizeFilter
 from aircraft_anomaly_detection.schemas.data import Annotation
 from aircraft_anomaly_detection.viz_utils import (
     draw_annotation,
@@ -49,6 +50,9 @@ def evaluate(
     dataset_idx = range(len(dataset))
     if hasattr(args, "dataset_idx") and args.dataset_idx is not None:
         dataset_idx = args.dataset_idx
+    postprocessing = []
+    if hasattr(args, "postprocessing") and args.postprocessing is not None:
+        postprocessing = args.postprocessing
     for i in tqdm.tqdm(dataset_idx):
         image, label, metadata = dataset[i]
         grd_annotation_list.append(metadata.annotation)
@@ -66,14 +70,27 @@ def evaluate(
         else:
             no_background_image, background_mask = image, None
 
+        # Preparing postprocessors
+        postprocessors = []
+        if "BBoxOnObjectFilter" in postprocessing:
+            if background_mask is None:
+                raise ValueError("To use BBoxOnObjectFilter background_mask can't be None")
+            postprocessors.append(BBoxOnObjectFilter(background_mask))
+        if "BBoxSizeFilter" in postprocessing:
+            w, h = image.size
+            object_size = w * h
+            if background_mask is not None:
+                object_size = w * h - background_mask.sum()
+            postprocessors.append(BBoxSizeFilter(object_size))
+
         if preprocessor is not None:
             image = preprocessor(image)
 
         pred_annotation = model.predict(image)
 
         # Postprocessing
-        if background_remover is not None:
-            refine_annotation(pred_annotation, background_mask)
+        for postprocessor in postprocessors:
+            postprocessor(pred_annotation)
 
         pred_annotation_list.append(pred_annotation)
 
@@ -133,28 +150,3 @@ def evaluate(
     # Plot confusion matrix
     evaluator.plot_confusion_matrix(os.path.join(output_dir, str(meta_info["dataset"]) + "_confusion_matrix.png"))
     evaluator.save_results_table(output_dir + "results_table.csv")
-
-
-def refine_annotation(annotation: Annotation, background_mask: np.ndarray) -> None:
-    """
-    Removes rectangles with large background area.
-    """
-    valid_bbox_idx = []
-    for i in range(len(annotation.bboxes)):
-        x1, y1, x2, y2 = annotation.bboxes[i]
-        if x1 == x2 or y1 == y2:
-            continue
-        area = (x2 - x1) * (y2 - y1)
-        background_area = background_mask[y1:y2, x1:x2].sum()
-        if background_area / area < 0.5:
-            valid_bbox_idx.append(i)
-        else:
-            if annotation.mask is not None:
-                annotation.mask[y1:y2, x1:x2] = 0.0
-    print(f"Refinement: removed {len(annotation.bboxes) - len(valid_bbox_idx)} boxes from {len(annotation.bboxes)}")
-    annotation.bboxes = [annotation.bboxes[i] for i in valid_bbox_idx]
-    annotation.scores = [annotation.scores[i] for i in valid_bbox_idx]
-    assert len(annotation.bboxes) == len(valid_bbox_idx) and len(annotation.scores) == len(valid_bbox_idx)
-
-    # TODO: add similar logic for mask annotations
-    annotation.damaged = len(annotation.bboxes) > 0
