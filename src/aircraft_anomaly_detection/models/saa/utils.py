@@ -44,9 +44,40 @@ def mask_to_box(mask: Mask) -> Box:
     # ensure bool
     mask_bool = mask_np.astype(bool)
     if not mask_bool.any():
-        return [0.0, 0.0, 0.0, 0.0]  # empty mask
+        return [0, 0, 0, 0]  # empty mask
 
     ys, xs = np.where(mask_bool)
     x_min, x_max = int(xs.min()), int(xs.max())
     y_min, y_max = int(ys.min()), int(ys.max())
     return [x_min, y_min, x_max, y_max]
+
+
+def scale_box(box: Box, scale: float, w: int, h: int) -> Box:
+    """Scale a box by preserving its center and scaling width/height, constrained by image bounds."""
+    x_min, y_min, x_max, y_max = box
+
+    # Calculate center of the box
+    center_x = (x_min + x_max) / 2
+    center_y = (y_min + y_max) / 2
+
+    # Calculate current width and height
+    width = x_max - x_min
+    height = y_max - y_min
+
+    # Scale width and height
+    new_width = width * scale
+    new_height = height * scale
+
+    # Calculate new box coordinates based on center and scaled dimensions
+    new_x_min = center_x - new_width / 2
+    new_y_min = center_y - new_height / 2
+    new_x_max = center_x + new_width / 2
+    new_y_max = center_y + new_height / 2
+
+    # Ensure box stays within image bounds
+    new_x_min = max(0, int(new_x_min))
+    new_y_min = max(0, int(new_y_min))
+    new_x_max = min(w, int(new_x_max))
+    new_y_max = min(h, int(new_y_max))
+
+    return [new_x_min, new_y_min, new_x_max, new_y_max]
