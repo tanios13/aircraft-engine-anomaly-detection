@@ -175,3 +175,5 @@ cython_debug/
 
 #anything that contains the word private 
 *private*
+
+*.png

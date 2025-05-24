@@ -2,4 +2,4 @@ input: lufthansa
 model_name: saa
 output_path: data/results/saa/
 remove_background: True
-preprocessing: ["clahe_rgb"]
+preprocessing: []
