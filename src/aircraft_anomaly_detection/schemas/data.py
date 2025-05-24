@@ -70,13 +70,13 @@ class Annotation:
         width, height = image.size
         self.mask = np.zeros((height, width), dtype=np.uint8)
 
-        for box in self.bboxes:
+        for box, score in zip(self.bboxes, self.scores):
             x0, y0, x1, y1 = map(int, box)  # ensure integers
             x0 = np.clip(x0, 0, width)
             x1 = np.clip(x1, 0, width)
             y0 = np.clip(y0, 0, height)
             y1 = np.clip(y1, 0, height)
-            self.mask[y0:y1, x0:x1] = 1
+            self.mask[y0:y1, x0:x1] = score
 
 
 class Metadata(BaseModel):

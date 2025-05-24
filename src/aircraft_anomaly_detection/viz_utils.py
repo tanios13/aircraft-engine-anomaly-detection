@@ -320,14 +320,14 @@ def visualize_bb_predictions(
     # Draw ground truth masks
     pred_label = "Damaged" if pred_annotation.damaged else "Normal"
     true_label = "Damaged" if gt_annotation.damaged else "Normal"
-    intersection = (gt_annotation.mask & pred_annotation.mask).sum()
-    union = (gt_annotation.mask | pred_annotation.mask).sum()
+    pred_mask = pred_annotation.mask > 0.0
+    gt_mask = gt_annotation.mask > 0.0
+    intersection = (gt_mask & pred_mask).sum()
+    union = (gt_mask | pred_mask).sum()
     iou = intersection / union if union > 0.0 else 0.0
     title = f"Pred: {pred_label}, True: {true_label}, IoU: {iou:0.4f}"
 
-    visualize_mask_overlap_with_image(
-        image, gt_annotation.mask, pred_annotation.mask, ax=ax, title=title, save_path=None
-    )
+    visualize_mask_overlap_with_image(image, gt_mask, pred_mask, ax=ax, title=title, save_path=None)
 
     if save_path:
         plt.savefig(save_path, bbox_inches="tight")

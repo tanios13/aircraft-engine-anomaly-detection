@@ -46,7 +46,10 @@ def evaluate(
     print("Predicting...")
 
     cmap = plt.rcParams["axes.prop_cycle"].by_key()["color"]
-    for i in tqdm.tqdm(range(len(dataset))):
+    dataset_idx = range(len(dataset))
+    if hasattr(args, "dataset_idx") and args.dataset_idx is not None:
+        dataset_idx = args.dataset_idx
+    for i in tqdm.tqdm(dataset_idx):
         image, label, metadata = dataset[i]
         grd_annotation_list.append(metadata.annotation)
         _ = draw_annotation(
@@ -145,13 +148,13 @@ def refine_annotation(annotation: Annotation, background_mask: np.ndarray) -> No
         background_area = background_mask[y1:y2, x1:x2].sum()
         if background_area / area < 0.5:
             valid_bbox_idx.append(i)
+        else:
+            if annotation.mask is not None:
+                annotation.mask[y1:y2, x1:x2] = 0.0
     print(f"Refinement: removed {len(annotation.bboxes) - len(valid_bbox_idx)} boxes from {len(annotation.bboxes)}")
     annotation.bboxes = [annotation.bboxes[i] for i in valid_bbox_idx]
     annotation.scores = [annotation.scores[i] for i in valid_bbox_idx]
     assert len(annotation.bboxes) == len(valid_bbox_idx) and len(annotation.scores) == len(valid_bbox_idx)
-
-    if annotation.mask is not None:
-        annotation.box_to_mask()
 
     # TODO: add similar logic for mask annotations
     annotation.damaged = len(annotation.bboxes) > 0
