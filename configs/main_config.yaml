@@ -3,3 +3,4 @@ model_name: saa
 output_path: data/results/saa/
 remove_background: True
 preprocessing: []
+dataset_idx: None

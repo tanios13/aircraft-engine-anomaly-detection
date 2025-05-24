@@ -13,6 +13,7 @@ class Evaluator:
             raise ValueError("The length of predictions and ground truth must be the same")
         self.predictions = predictions
         self.ground_truth = ground_truth
+        self.threshold = 0.0
 
     def __call__(self):
         pass
@@ -92,6 +93,9 @@ class Evaluator:
         results_table.to_csv(save_path, index=True)
         print(f"Results table saved to : {save_path}")
 
+    def make_binary(self, mask):
+        return mask > self.threshold
+
     def IoU(self):
         """
         Computes the Intersection over Union (IoU) score for the binary masks.
@@ -101,8 +105,10 @@ class Evaluator:
         count = 0
 
         for pred, gt in zip(self.predictions, self.ground_truth):
-            intersection = (pred.mask & gt.mask).sum()
-            union = (pred.mask | gt.mask).sum()
+            pred_mask = self.make_binary(pred.mask)
+            gt_mask = self.make_binary(gt.mask)
+            intersection = (pred_mask & gt_mask).sum()
+            union = (pred_mask | gt_mask).sum()
 
             total_iou += intersection / union if union > 0 else 0.0
             count += 1
