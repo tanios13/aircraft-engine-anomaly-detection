@@ -64,6 +64,50 @@ class BBoxSizeFilter(AnnotationPostProcessor):
         annotation.damaged = len(annotation.bboxes) > 0
 
 
+class TopKFilter(AnnotationPostProcessor):
+    """
+    A filter that removes bounding boxes whose areas are either too small or too large
+    relative to the total object area.
+    """
+
+    def __init__(self, top_k: int = 3):
+        """
+        Parameters:
+        - object_area: Total area of the object being annotated.
+        - min_bb_size: Minimum relative size of a bounding box (compared to object_area).
+        - max_bb_size: Maximum relative size of a bounding box (compared to object_area).
+        """
+        self.top_k = top_k
+
+    def __call__(self, annotation: Annotation) -> None:
+        """
+        Filters out bounding boxes from the annotation that fall outside the allowed size range.
+        """
+        valid_bbox_idx = []
+
+        ids = range(len(annotation.bboxes))
+        key = lambda id: annotation.scores[id]
+        ids = sorted(ids, key=key, reverse=True)
+        if self.top_k < len(annotation.bboxes):
+            valid_bbox_idx = ids[: self.top_k]
+        else:
+            valid_bbox_idx = range(len(annotation.bboxes))
+
+        if annotation.mask is not None:
+            valid_bbox_mask = np.zeros_like(annotation.mask)
+            for i in valid_bbox_idx:
+                x1, y1, x2, y2 = annotation.bboxes[i]
+                valid_bbox_mask[y1:y2, x1:x2] = 1.0
+            annotation.mask = annotation.mask * valid_bbox_mask
+
+        print(f"TopKFilter: removed {len(annotation.bboxes) - len(valid_bbox_idx)} boxes from {len(annotation.bboxes)}")
+
+        annotation.bboxes = [annotation.bboxes[i] for i in valid_bbox_idx]
+        annotation.scores = [annotation.scores[i] for i in valid_bbox_idx]
+
+        annotation.damaged = len(annotation.bboxes) > 0
+
+
 class BBoxOnObjectFilter(AnnotationPostProcessor):
     """
     A filter that removes bounding boxes that primarily lie on the background

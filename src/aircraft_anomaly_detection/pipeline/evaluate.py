@@ -16,6 +16,7 @@ from aircraft_anomaly_detection.postprocessing import (
     BBoxSizeFilter,
     CLIPAnomalyFilter,
     CLIPAnomalySegmentor,
+    TopKFilter,
 )
 from aircraft_anomaly_detection.schemas.data import Annotation
 from aircraft_anomaly_detection.viz_utils import (
@@ -166,4 +167,6 @@ def prepare_postprocessors(args, background_mask, image):
         postprocessors.append(CLIPAnomalySegmentor())
     if "CLIPAnomalyFilter" in postprocessing:
         postprocessors.append(CLIPAnomalyFilter())
+    if "TopKFilter" in postprocessing:
+        postprocessors.append(TopKFilter())
     return postprocessors
