@@ -1,5 +1,5 @@
 region_proposal_model: "GroundingDINO"
-region_refiner_model: "SAM"
+region_refiner_model: "CLIPSeg"
 saliency_model: "ModelINet"
 box_threshold: 0.3
 text_threshold: 0.3
@@ -11,10 +11,5 @@ object_prompt:
   proposed_object_min_area: 0.2
   proposed_object_max_area: 0.9
 prompt_pairs:
-  - ["defect", "metal"]
-  - ["scratch", "metal"]
-  - ["dent", "metal"]
-  - ["nick", "metal"]
-  - ["crack", "metal"]
-  - ["chip", "metal"]
+  - ["defect, scratch, dent, nick, crack, chip", "metallic surface, skrew hole, bolt"]
 debug: true

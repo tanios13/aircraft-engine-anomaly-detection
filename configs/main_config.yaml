@@ -1,6 +1,7 @@
 input: lufthansa
-model_name: owlvit
-output_path: data/results/owlvit/
+model_name: saa
+output_path: data/results/saa/
 remove_background: True
 preprocessing: []
 postprocessing: ['BBoxSizeFilter', 'BBoxOnObjectFilter']
+dataset_idx: [0]

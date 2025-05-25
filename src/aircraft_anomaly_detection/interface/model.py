@@ -47,8 +47,8 @@ class SegmentorInterface(ABC):
     @abstractmethod
     def predict(
         self,
-        boxes_xyxy: np.ndarray,
         *,
+        boxes_xyxy: np.ndarray,
         multimask_output: bool = False,
     ) -> np.ndarray:
         """Generate segmentation masks for ``boxes_xyxy``.

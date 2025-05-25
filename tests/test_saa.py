@@ -58,10 +58,11 @@ def test_saa_predict() -> None:
     # would typically be injected here if SAA's __init__ supports them.
     model = SAA(
         region_proposal_model="GroundingDINO",  # Placeholder or actual model key
-        region_refiner_model="SAM",  # Placeholder or actual model key
+        region_refiner_model="CLIPSeg",  # Placeholder or actual model key
         saliency_model="ModelINet",
         box_threshold=0.2,
         text_threshold=0.2,
+        debug=True,  # Enable debug mode for detailed output
     )
 
     # Prepare mock inputs for the predict method
@@ -96,3 +97,8 @@ def test_saa_predict() -> None:
 
     # Validate the output structure and types
     assert isinstance(prediction, Annotation), f"Predictions should be a Annotation, but got {type(prediction)}"
+
+
+# main function
+if __name__ == "__main__":
+    test_saa_predict()

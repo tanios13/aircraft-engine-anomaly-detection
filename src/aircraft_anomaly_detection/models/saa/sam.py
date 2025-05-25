@@ -56,9 +56,10 @@ class SamSegmentorHF(SegmentorInterface):
 
     def predict(
         self,
-        boxes_xyxy: np.ndarray,
         *,
+        boxes_xyxy: np.ndarray,
         multimask_output: bool = False,
+        **kwargs: object,
     ) -> np.ndarray:
         """Return boolean masks for each bounding box.
 
