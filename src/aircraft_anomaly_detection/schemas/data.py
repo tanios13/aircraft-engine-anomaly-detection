@@ -68,7 +68,7 @@ class Annotation:
         """
         image = self.image
         width, height = image.size
-        self.mask = np.zeros((height, width), dtype=np.uint8)
+        self.mask = np.zeros((height, width), dtype=np.float16)
 
         for box, score in zip(self.bboxes, self.scores):
             x0, y0, x1, y1 = map(int, box)  # ensure integers

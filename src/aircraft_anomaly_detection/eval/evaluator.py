@@ -192,5 +192,3 @@ class Evaluator:
             raise ValueError("Ground truth mask cannot be None")
         if any(pred.mask.shape != gt.mask.shape for pred, gt in zip(self.predictions, self.ground_truth)):
             raise ValueError("Prediction and ground truth masks must have the same shape")
-        if any(pred.mask.dtype != gt.mask.dtype for pred, gt in zip(self.predictions, self.ground_truth)):
-            raise ValueError("Prediction and ground truth masks must have the same dtype")
