@@ -11,7 +11,12 @@ from PIL import Image
 from aircraft_anomaly_detection.dataloader.loader import AnomalyDataset
 from aircraft_anomaly_detection.eval.evaluator import Evaluator
 from aircraft_anomaly_detection.interface.model import ModelInterface
-from aircraft_anomaly_detection.postprocessing import BBoxOnObjectFilter, BBoxSizeFilter
+from aircraft_anomaly_detection.postprocessing import (
+    BBoxOnObjectFilter,
+    BBoxSizeFilter,
+    CLIPAnomalyFilter,
+    CLIPAnomalySegmentor,
+)
 from aircraft_anomaly_detection.schemas.data import Annotation
 from aircraft_anomaly_detection.viz_utils import (
     draw_annotation,
@@ -50,9 +55,6 @@ def evaluate(
     dataset_idx = range(len(dataset))
     if hasattr(args, "dataset_idx") and args.dataset_idx is not None:
         dataset_idx = args.dataset_idx
-    postprocessing = []
-    if hasattr(args, "postprocessing") and args.postprocessing is not None:
-        postprocessing = args.postprocessing
     for i in tqdm.tqdm(dataset_idx):
         image, label, metadata = dataset[i]
         grd_annotation_list.append(metadata.annotation)
@@ -71,17 +73,7 @@ def evaluate(
             no_background_image, background_mask = image, None
 
         # Preparing postprocessors
-        postprocessors = []
-        if "BBoxOnObjectFilter" in postprocessing:
-            if background_mask is None:
-                raise ValueError("To use BBoxOnObjectFilter background_mask can't be None")
-            postprocessors.append(BBoxOnObjectFilter(background_mask))
-        if "BBoxSizeFilter" in postprocessing:
-            w, h = image.size
-            object_size = w * h
-            if background_mask is not None:
-                object_size = w * h - background_mask.sum()
-            postprocessors.append(BBoxSizeFilter(object_size))
+        postprocessors = prepare_postprocessors(args, background_mask, image)
 
         if preprocessor is not None:
             image = preprocessor(image)
@@ -150,3 +142,28 @@ def evaluate(
     # Plot confusion matrix
     evaluator.plot_confusion_matrix(os.path.join(output_dir, str(meta_info["dataset"]) + "_confusion_matrix.png"))
     evaluator.save_results_table(output_dir + "results_table.csv")
+
+
+# Helpers #########
+
+
+def prepare_postprocessors(args, background_mask, image):
+    postprocessing = []
+    if hasattr(args, "postprocessing") and args.postprocessing is not None:
+        postprocessing = args.postprocessing
+    postprocessors = []
+    if "BBoxOnObjectFilter" in postprocessing:
+        if background_mask is None:
+            raise ValueError("To use BBoxOnObjectFilter background_mask can't be None")
+        postprocessors.append(BBoxOnObjectFilter(background_mask))
+    if "BBoxSizeFilter" in postprocessing:
+        w, h = image.size
+        object_size = w * h
+        if background_mask is not None:
+            object_size = w * h - background_mask.sum()
+        postprocessors.append(BBoxSizeFilter(object_size))
+    if "CLIPAnomalySegmentor" in postprocessing:
+        postprocessors.append(CLIPAnomalySegmentor())
+    if "CLIPAnomalyFilter" in postprocessing:
+        postprocessors.append(CLIPAnomalyFilter())
+    return postprocessors
