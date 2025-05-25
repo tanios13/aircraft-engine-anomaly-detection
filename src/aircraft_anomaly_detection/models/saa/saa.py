@@ -15,7 +15,7 @@ from aircraft_anomaly_detection.interface.model import (
     SaliencyModelInterface,
     SegmentorInterface,
 )
-from aircraft_anomaly_detection.models.saa import dino, sam, widenet
+from aircraft_anomaly_detection.models.saa import dino, sam, widenet,clipseg
 from aircraft_anomaly_detection.schemas import Annotation, ObjectPrompt, PromptPair
 from aircraft_anomaly_detection.viz_utils import draw_annotation
 
@@ -77,6 +77,16 @@ class SAA(ModelInterface):
                     model_id=region_refiner_model_config.get("model_id", "facebook/sam-vit-base"),
                     device=device,
                 )
+            if region_refiner_model == "CLIPSeg":
+                self.anomaly_region_refiner: SegmentorInterface = (
+                    clipseg.ClipSegSegmentorHF(
+                        model_id=region_refiner_model_config.get(
+                            "model_id", "CIDAS/clipseg-rd64-refined"
+                        ),
+                        device=device,
+                    )
+                )
+
         elif isinstance(region_refiner_model, SegmentorInterface):
             self.anomaly_region_refiner = region_refiner_model
         else:
@@ -180,7 +190,6 @@ class SAA(ModelInterface):
         else:
             self_similarity_map = self.self_similarity_calculation(image)
 
-        print(f"Self-similarity map shape: {self_similarity_map.shape}")
 
         if self.debug and (debug_path_3 := kwargs.get("debug_path_3", "3_self_similarity.png")):
             # normalize self_similarity_map to [0,1]
@@ -344,6 +353,7 @@ class SAA(ModelInterface):
             # empty_mask = np.zeros((h, w), dtype=bool)
             return [], [], 1.0, []
 
+
         # 3️⃣ Stack, convert to XYXY abs, NMS
         boxes_xyxy = torch.cat(all_boxes, dim=0)
         scores_cat = torch.as_tensor(all_scores)
@@ -356,7 +366,7 @@ class SAA(ModelInterface):
 
         # 4️⃣ Run the segmentor once for all kept boxes
         all_masks: list[np.ndarray] = []
-        for box_xyxy in boxes_xyxy:
+        for i,box_xyxy in enumerate(boxes_xyxy):
             mask = np.zeros((h, w), dtype=np.uint8)
             # Crop the image around the box with some enlargement
             box_xyxy = box_xyxy.cpu().numpy().astype(np.int32)
@@ -381,7 +391,7 @@ class SAA(ModelInterface):
             ]
             box_in_crop_arr = np.array(box_in_crop, dtype=np.int32)
             self.anomaly_region_refiner.set_image(crop_image)  # encode the cropped image
-            crop_mask = self.anomaly_region_refiner.predict(box_in_crop_arr, multimask_output=True).squeeze(0)
+            crop_mask = self.anomaly_region_refiner.predict(boxes_xyxy=box_in_crop_arr,text_prompts = [all_phrases[i]] ,multimask_output=True).squeeze(0)  # noqa: E501
 
             # Place the cropped mask back into the full-sized mask at the correct location
             crop_h, crop_w = crop_mask.shape
