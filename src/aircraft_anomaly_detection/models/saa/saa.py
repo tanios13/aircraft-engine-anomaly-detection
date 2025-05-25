@@ -15,7 +15,7 @@ from aircraft_anomaly_detection.interface.model import (
     SaliencyModelInterface,
     SegmentorInterface,
 )
-from aircraft_anomaly_detection.models.saa import dino, sam, widenet
+from aircraft_anomaly_detection.models.saa import dino, sam, widenet,owlvit
 from aircraft_anomaly_detection.schemas import Annotation, ObjectPrompt, PromptPair
 from aircraft_anomaly_detection.viz_utils import draw_annotation
 
@@ -65,6 +65,12 @@ class SAA(ModelInterface):
                     model_id=region_proposal_model_config.get("model_id", "IDEA-Research/grounding-dino-tiny"),
                     device=device,
                 )
+            elif region_proposal_model == "OwlViT":
+                self.anomaly_region_generator: DetectorInterface = owlvit.OwlViT(
+                    model_id=region_proposal_model_config.get("model_id", "google/owlvit-base-patch32"),
+                    device=device,
+                )
+
         elif isinstance(region_proposal_model, DetectorInterface):
             self.anomaly_region_generator = region_proposal_model
         else:
@@ -124,7 +130,7 @@ class SAA(ModelInterface):
         self.scale: float = kwargs.get("scale", 3.0)  # type: ignore
 
         # enlarge the bounding box
-        self.enlarge_scale: float = kwargs.get("enlarge_scale", 1.3)  # type: ignore
+        self.enlarge_scale: float = kwargs.get("enlarge_scale", 2)  # type: ignore
 
     def predict(self, input_image: str | Image.Image | np.ndarray, **kwargs: dict[str, Any]) -> Annotation:
         """
@@ -140,7 +146,6 @@ class SAA(ModelInterface):
             raise ValueError("Object prompt and defect prompts must be set before calling predict.")
 
         image = self.load_image(input_image)
-        print(f"Image size: {image.size}, image height: {image.height}, image width: {image.width}")
 
         # object segmentation
         obj_masks, obj_scores, obj_area, _ = self.ensemble_text_guided_mask_proposal(
@@ -151,6 +156,7 @@ class SAA(ModelInterface):
             nms_iou_thr=self.nms_iou_thr,
             debug_path=kwargs.get("debug_path_1", "1_object.png") if self.debug else "",  # type: ignore
         )
+
         if len(obj_masks) > 0:
             defect_max_area = obj_area * self._obj_prompt.anomaly_area_ratio
             print(
@@ -180,8 +186,6 @@ class SAA(ModelInterface):
         else:
             self_similarity_map = self.self_similarity_calculation(image)
 
-        print(f"Self-similarity map shape: {self_similarity_map.shape}")
-
         if self.debug and (debug_path_3 := kwargs.get("debug_path_3", "3_self_similarity.png")):
             # normalize self_similarity_map to [0,1]
             min_val, max_val = self_similarity_map.min(), self_similarity_map.max()
@@ -210,6 +214,16 @@ class SAA(ModelInterface):
             k=self._obj_prompt.max_anomalies,
         )
 
+        # remove masks with scores below the threshold
+        masks = []
+        new_rescored_defect_scores = []
+        new_defect_labels = []
+        for mask, score, label in zip(defect_masks, rescored_defect_scores, defect_labels):
+            if score >= 0.005:
+                masks.append(mask)
+                new_rescored_defect_scores.append(score)
+                new_defect_labels.append(label)
+
         result = Annotation(
             image=image,
             damaged=True if len(rescored_defect_scores) == 0 or max(rescored_defect_scores) > 0.0 else False,
@@ -231,7 +245,10 @@ class SAA(ModelInterface):
             prompts: Sequence of (defect, background) pairs.
         """
         self._prompt_pairs = [
-            PromptPair(target=p.target.strip().lower().rstrip("."), background=p.background.strip().lower().rstrip("."))
+            PromptPair(
+                target=p.target.strip().lower().rstrip("."),
+                background=p.background.strip().lower().rstrip("."),
+            )
             for p in prompts
         ]
 
@@ -293,6 +310,7 @@ class SAA(ModelInterface):
 
         for pair in prompts:
             # 1️⃣ Run the open-vocab detector
+            print(pair.target)
             det_boxes, det_scores, det_phrases = self.anomaly_region_generator.predict(
                 image=image,
                 text_prompts=[pair.target],

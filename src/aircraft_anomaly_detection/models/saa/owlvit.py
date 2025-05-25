@@ -45,6 +45,19 @@ class OwlViT(DetectorInterface):
             Tuple of bounding boxes, scores, and labels.
         """
         text = [prompt.strip().lower() for prompt in text_prompts]
+        #append prompts of parts that are often misclassified as defects such as "normal skrew hole", "normal bolt" , "engraving"
+        if text_prompts != 'metallic surface':
+            text += [
+                "normal screw hole",
+                "normal bolt",
+                "engraving",
+                "normal rivet",
+                "normal panel",
+            ]
+        else :
+            text = [
+                "metal"]
+            
         inputs = self.processor(images=image, text=text, return_tensors="pt").to(
             self.device
         )
@@ -67,10 +80,28 @@ class OwlViT(DetectorInterface):
         scores = [score.item() for score in result["scores"]]
         detected_labels = [text[i] for i in result["labels"].cpu().numpy()]
 
+        #exclude entries that were of the "normal" class
+        normal_classes = [
+            "normal screw hole",
+            "normal bolt",
+            "engraving",
+            "normal rivet",
+            "normal panel",
+            "metal object with holes",
+            "smooth metal surface",
+        ]
+
+        filtered_indices = [
+            i for i, label in enumerate(detected_labels) if label not in normal_classes
+        ]
+        boxes = boxes[filtered_indices]
+        scores = [scores[i] for i in filtered_indices]
+        detected_labels = [detected_labels[i] for i in filtered_indices]
+
         sorted_indices = np.argsort(scores)[::-1]
-        boxes = boxes[sorted_indices][:3]
-        scores = [scores[i] for i in sorted_indices][:3]
-        detected_labels = [detected_labels[i] for i in sorted_indices][:3]
+        boxes = boxes[sorted_indices][:5]
+        scores = [scores[i] for i in sorted_indices][:5]
+        detected_labels = [detected_labels[i] for i in sorted_indices][:5]
 
         # check if the detected labels are empty
 
