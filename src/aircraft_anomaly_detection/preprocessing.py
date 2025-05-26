@@ -11,8 +11,8 @@ from transformers import AutoProcessor, CLIPSegForImageSegmentation
 class CLIPBackgroundRemover:
     def __init__(
         self,
-        background_text: str = "a background",
-        foreground_text: str = "a metal part",
+        background_text: str = "background",
+        foreground_text: str = "metal component or part",
         threshold: float = 0.5,
         background_color: list = [255, 255, 255],
     ):
