@@ -120,12 +120,12 @@ class Evaluator:
         Computes the pixel AUROC score.
         """
         self._check_masks()
-        y_true = [gt.mask for gt in self.ground_truth]
-        y_pred = [pred.mask for pred in self.predictions]
+        y_true_flat_masks = [gt.mask.flatten() for gt in self.ground_truth]
+        y_pred_flat_masks = [pred.mask.flatten() for pred in self.predictions]
 
         # Flatten the masks and compute AUROC
-        y_true_flat = [item for sublist in y_true for item in sublist]
-        y_pred_flat = [item for sublist in y_pred for item in sublist]
+        y_true_flat = np.concatenate(y_true_flat_masks)
+        y_pred_flat = np.concatenate(y_pred_flat_masks)
 
         return roc_auc_score(y_true_flat, y_pred_flat)
 
