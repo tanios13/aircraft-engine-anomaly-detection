@@ -93,27 +93,52 @@ class Evaluator:
         results_table.to_csv(save_path, index=True)
         print(f"Results table saved to : {save_path}")
 
-    def make_binary(self, mask):
-        return mask > self.threshold
+    def make_binary(self, mask, threshold=None):
+        if threshold is None:
+            threshold = self.threshold
+        return mask > threshold
 
-    def IoU(self):
+    def IoU(self, threshold=None):
         """
         Computes the Intersection over Union (IoU) score for the binary masks.
         """
         self._check_masks()
+
+        if threshold is None:
+            threshold = self.threshold
+
         total_iou = 0.0
         count = 0
 
         for pred, gt in zip(self.predictions, self.ground_truth):
-            pred_mask = self.make_binary(pred.mask)
-            gt_mask = self.make_binary(gt.mask)
+            pred_mask = self.make_binary(pred.mask, threshold)
+            gt_mask = self.make_binary(gt.mask, threshold)
             intersection = (pred_mask & gt_mask).sum()
             union = (pred_mask | gt_mask).sum()
 
-            total_iou += intersection / union if union > 0 else 1.0
-            count += 1
+            total_iou += intersection / union if union > 0 else 0.0
+            count += 1 if union > 0 else 0.0
 
         return total_iou / count if count > 0 else 0.0
+
+    def max_IoU(self):
+        """
+        Computes the maximum Intersection over Union (IoU) score for the binary masks.
+        """
+        self._check_masks()
+
+        y_true_flat_masks = [gt.mask.flatten() for gt in self.ground_truth]
+        y_pred_flat_masks = [pred.mask.flatten() for pred in self.predictions]
+
+        # Flatten the masks and compute AUROC
+        y_true_flat = np.concatenate(y_true_flat_masks)
+        y_pred_flat = np.concatenate(y_pred_flat_masks)
+
+        all_scores = np.unique(np.concatenate(y_true_flat, y_pred_flat))
+        max_iou = 0.0
+        for score in all_scores:
+            max_iou = max(max_iou, self.IoU(threshold=score))
+        return max_iou
 
     def pixel_auroc(self):
         """
@@ -169,6 +194,11 @@ class Evaluator:
             results["IoU"] = [self.IoU()]
         except Exception as e:
             print(f"Error in IoU calculation: {e}")
+
+        try:
+            results["max_IoU"] = [self.IoU()]
+        except Exception:
+            print("Error in Max-IoU calculation: {e}")
 
         return results
 
