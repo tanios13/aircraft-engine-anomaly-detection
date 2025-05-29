@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from PIL import Image
-from transformers import OwlViTForObjectDetection, OwlViTProcessor
+from transformers import Owlv2ForObjectDetection, Owlv2Processor, OwlViTForObjectDetection, OwlViTProcessor
 
 from aircraft_anomaly_detection.interface.model import ModelInterface
 from aircraft_anomaly_detection.schemas.data import Annotation
@@ -30,8 +30,12 @@ class OwlViT(ModelInterface):
             device (str, optional): Device to run the model. Defaults to "cuda" if available, else "cpu".
         """
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
-        self.processor = OwlViTProcessor.from_pretrained(pretrained_model_name_or_pat)
-        self.model = OwlViTForObjectDetection.from_pretrained(pretrained_model_name_or_pat).to(self.device)
+        if pretrained_model_name_or_pat.startswith("google/owlvit"):
+            self.processor = OwlViTProcessor.from_pretrained(pretrained_model_name_or_pat)
+            self.model = OwlViTForObjectDetection.from_pretrained(pretrained_model_name_or_pat).to(self.device)
+        else:
+            self.processor = Owlv2Processor.from_pretrained(pretrained_model_name_or_pat)
+            self.model = Owlv2ForObjectDetection.from_pretrained(pretrained_model_name_or_pat).to(self.device)
 
         self.text_prompts: list[list[str]] = text_prompts
         self.undamaged_idxes: list[int] = undamaged_idxes
