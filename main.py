@@ -51,7 +51,7 @@ def main(args: SimpleNamespace) -> None:
     preprocessor = PreProcessor(args.preprocessing) if args.preprocessing else None
 
     input_val = args.input.lower()
-    if input_val in get_args(DatasetString) or input_val == "all":
+    if input_val in get_args(DatasetString) or inputp_val == "all":
         category = getattr(args, "category", None)
         evaluate(
             AnomalyDataset(input_val, category),
