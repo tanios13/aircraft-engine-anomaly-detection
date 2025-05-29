@@ -110,6 +110,7 @@ def evaluate(
             "model": args.model_name.lower(),
             "background_removal": "True" if args.remove_background else "False",
             "preprocessing": args.preprocessing if args.preprocessing else "None",
+            "postprocessing": args.postprocessing if args.postprocessing else "None",
         }
     else:
         meta_info = {

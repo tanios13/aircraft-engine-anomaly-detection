@@ -4,6 +4,7 @@ output_path: data/results/owlvit/
 remove_background: True
 preprocessing: []
 postprocessing: ['BBoxSizeFilter', 'BBoxOnObjectFilter', 'TopKFilter']
+dataset_idx: [0]
 evaluator: 
   threshold: 0.0
   iou_threshold: 0.1
