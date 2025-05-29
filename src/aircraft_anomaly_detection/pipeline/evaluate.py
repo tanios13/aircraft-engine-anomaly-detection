@@ -98,7 +98,7 @@ def evaluate(
     print("Evaluating...")
 
     # Evaluate the model
-    evaluator = Evaluator(pred_annotation_list, grd_annotation_list)
+    evaluator = Evaluator(pred_annotation_list, grd_annotation_list, **args.evaluator)
     results = evaluator.eval()
 
     print("Saving results...")
