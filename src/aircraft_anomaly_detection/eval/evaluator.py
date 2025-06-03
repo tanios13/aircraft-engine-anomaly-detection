@@ -8,24 +8,25 @@ from aircraft_anomaly_detection.schemas.data import Annotation
 
 
 class Evaluator:
-    def __init__(self, predictions: list[Annotation], ground_truth: list[Annotation]) -> None:
+    def __init__(self, predictions: list[Annotation], ground_truth: list[Annotation], **kwargs) -> None:
         if len(predictions) != len(ground_truth):
             raise ValueError("The length of predictions and ground truth must be the same")
         self.predictions = predictions
         self.ground_truth = ground_truth
-        self.threshold = 0.0
+        self.threshold = kwargs.get("threshold", 0.0)
+        self.iou_threshold = kwargs.get("iou_threshold", 0.1)
 
     def __call__(self):
         pass
 
-    def accuracy(self):
+    def accuracy_binary(self):
         """
         Computes the accuracy of the binary predictions.
         """
         correct = sum(1 for pred, gt in zip(self.predictions, self.ground_truth) if pred.damaged == gt.damaged)
         return correct / len(self.predictions)
 
-    def f1_score(self):
+    def f1_score_binary(self):
         """
         Computes the F1 score of the binary predictions.
         """
@@ -33,7 +34,82 @@ class Evaluator:
         y_pred = [1 if pred.damaged else 0 for pred in self.predictions]
         return f1_score(y_true, y_pred)
 
-    def max_accuracy(self):
+    def bbox_iou(self, bbox1, bbox2):
+        x0, y0, x1, y1 = bbox1
+        x2, y2, x3, y3 = bbox2
+
+        if min(x1, x3) >= max(x0, x2) and min(y1, y3) >= max(y0, y2):
+            intersection = float((min(x1, x3) - max(x0, x2)) * (min(y1, y3) - max(y0, y2)))
+        else:
+            intersection = 0.0
+        area1 = (x1 - x0) * (y1 - y0)
+        area2 = (x3 - x2) * (y3 - y2)
+        assert area1 > 0.0 and area2 > 0.0 and intersection >= 0.0
+        union = area1 + area2 - intersection
+
+        return intersection / union
+
+    def f1_score_localization(self):
+        """
+        Computes the F1 score of the localization (bounding boxes) predictions.
+        """
+        unmarked_pred_bbox_idx = []
+        for pred_id in range(len(self.predictions)):
+            unmarked_pred_bbox_idx += [(pred_id, bbox_id) for bbox_id in range(len(self.predictions[pred_id].bboxes))]
+        unmakred_gt_bbox_idx = []
+        for gt_id in range(len(self.ground_truth)):
+            unmakred_gt_bbox_idx += [(gt_id, bbox_id) for bbox_id in range(len(self.ground_truth[gt_id].bboxes))]
+
+        # sort pred bboxes by score (decreasing)
+        bbox_score = lambda id: self.predictions[id[0]].scores[id[1]]
+        unmarked_pred_bbox_idx = sorted(unmarked_pred_bbox_idx, key=bbox_score, reverse=True)
+
+        f1_score = None
+        recall = None
+        precision = None
+        max_f1_score = 0.0
+        true_pos = 0
+        false_pos = 0
+
+        cur_precision = 0.0
+        cur_recall = 0.0
+        cur_f1_score = 0.0
+        for pred_id, pred_bbox_id in unmarked_pred_bbox_idx:
+            if self.predictions[pred_id].scores[pred_bbox_id] < self.threshold and f1_score is None:
+                f1_score = cur_f1_score
+                recall = cur_recall
+                precision = cur_precision
+            matched = False
+            for gt_id, gt_bbox_id in unmakred_gt_bbox_idx:
+                bbox_iou = self.bbox_iou(
+                    self.predictions[pred_id].bboxes[pred_bbox_id], self.ground_truth[gt_id].bboxes[gt_bbox_id]
+                )
+                if bbox_iou >= self.iou_threshold:
+                    true_pos += 1
+                    unmakred_gt_bbox_idx.remove((gt_id, gt_bbox_id))
+                    matched = True
+                    break
+            if not matched:
+                false_pos += 1
+
+            # Current F1 score computation
+            false_neg = len(unmakred_gt_bbox_idx)
+            cur_precision = true_pos / (true_pos + false_pos)
+            cur_recall = true_pos / (true_pos + false_neg) if true_pos + false_neg > 0.0 else 0.0
+            cur_f1_score = (
+                2.0 * (cur_precision * cur_recall) / (cur_precision + cur_recall)
+                if cur_precision + cur_recall > 0.0
+                else 0.0
+            )
+
+            max_f1_score = max(max_f1_score, cur_f1_score)
+        if f1_score is None:
+            f1_score = cur_f1_score
+            precision = cur_precision
+            recall = cur_recall
+        return f1_score, max_f1_score, precision, recall
+
+    def max_accuracy_binary(self):
         """
         Computes the maximum accuracy based on predicted scores.
         """
@@ -47,7 +123,7 @@ class Evaluator:
             accuracies.append(accuracy_score(y_true, (y_probs > threshold)))
         return max(accuracies)
 
-    def max_f1_score(self):
+    def max_f1_score_binary(self):
         y_true = np.array([1 if gt.damaged else 0 for gt in self.ground_truth])
         y_probs = np.array([0.0 if len(pred.scores) == 0 else min(pred.scores) for pred in self.predictions])
         assert y_true.shape == y_probs.shape
@@ -58,7 +134,7 @@ class Evaluator:
             f1_scores.append(f1_score(y_true, (y_probs > threshold)))
         return max(f1_scores)
 
-    def auroc(self):
+    def auroc_binary(self):
         y_true = np.array([1 if gt.damaged else 0 for gt in self.ground_truth])
         y_probs = np.array([0.0 if len(pred.scores) == 0 else min(pred.scores) for pred in self.predictions])
         assert y_true.shape == y_probs.shape
@@ -161,29 +237,29 @@ class Evaluator:
         results = {}
         self._check_labels()
         try:
-            results["accuracy"] = [self.accuracy()]
+            results["binary:accuracy"] = [self.accuracy_binary()]
         except Exception as e:
-            print(f"Error in accuracy computation: {e}")
+            print(f"Error in accuracy (binary) computation: {e}")
 
         try:
-            results["f1_score"] = [self.f1_score()]
+            results["binary:f1_score"] = [self.f1_score_binary()]
         except Exception as e:
-            print(f"Error in F1 Score computation: {e}")
+            print(f"Error in F1 Score (binary) computation: {e}")
 
         try:
-            results["max_accuracy"] = [self.max_accuracy()]
+            results["binary:max_accuracy"] = [self.max_accuracy_binary()]
         except Exception as e:
-            print(f"Error in max. accuracy computation: {e}")
+            print(f"Error in max. accuracy (binary) computation: {e}")
 
         try:
-            results["max_f1_score"] = self.max_f1_score()
+            results["binary:max_f1_score"] = self.max_f1_score_binary()
         except Exception as e:
-            print(f"Error in max. F1 Score computation: {e}")
+            print(f"Error in max. F1 Score (binary) computation: {e}")
 
         try:
-            results["auroc"] = self.auroc()
+            results["binary:auroc"] = [self.auroc_binary()]
         except Exception as e:
-            print(f"Error in AUROC computation: {e}")
+            print(f"Error in AUROC (binary) computation: {e}")
 
         try:
             results["pixel_auroc"] = [self.pixel_auroc()]
@@ -199,6 +275,15 @@ class Evaluator:
             results["max_IoU"] = [self.IoU()]
         except Exception:
             print("Error in Max-IoU calculation: {e}")
+
+        try:
+            results["localizaiton:f1_score"]
+        except Exception:
+            localization_results = self.f1_score_localization()
+            results["localization:f1_score"] = [localization_results[0]]
+            results["localization:max_f1_score"] = [localization_results[1]]
+            results["localization:precision"] = [localization_results[2]]
+            results["localization:recall"] = [localization_results[3]]
 
         return results
 

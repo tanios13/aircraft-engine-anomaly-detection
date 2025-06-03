@@ -98,7 +98,7 @@ def evaluate(
     print("Evaluating...")
 
     # Evaluate the model
-    evaluator = Evaluator(pred_annotation_list, grd_annotation_list)
+    evaluator = Evaluator(pred_annotation_list, grd_annotation_list, **args.evaluator)
     results = evaluator.eval()
 
     print("Saving results...")
@@ -110,6 +110,7 @@ def evaluate(
             "model": args.model_name.lower(),
             "background_removal": "True" if args.remove_background else "False",
             "preprocessing": args.preprocessing if args.preprocessing else "None",
+            "postprocessing": args.postprocessing if args.postprocessing else "None",
         }
     else:
         meta_info = {
