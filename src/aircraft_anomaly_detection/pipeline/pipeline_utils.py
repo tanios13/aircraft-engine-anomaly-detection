@@ -76,5 +76,9 @@ def dump_annotations(images_metadata: list[dict], pred_annotations: list[dict], 
         "annotations": annotations,
     }
 
-    with open(output_dir.joinpath("predicted_annotations.coco.json"), "w") as file:
-        json.dump(annotation_dict, file)
+    try:
+        with open(output_dir.joinpath("predicted_annotations.coco.json"), "w") as file:
+            json.dump(annotation_dict, file)
+        print(f"Saved predicted annotations in: {output_dir.joinpath('predicted_annotations.coco.json')}")
+    except Exception as e:
+        print(f"Failed to save the predicted annotations, error: {e}")
