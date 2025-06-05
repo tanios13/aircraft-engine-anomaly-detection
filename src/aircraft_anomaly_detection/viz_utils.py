@@ -300,7 +300,7 @@ def visualize_mask_overlap_with_image(
 
 def visualize_bb_predictions(
     image: Image.Image,
-    gt_annotation: Annotation,
+    gt_annotation: Annotation | None,
     pred_annotation: Annotation,
     cmap: Iterable[str] | None = None,
     save_path: str | Path | None = None,
@@ -319,9 +319,15 @@ def visualize_bb_predictions(
 
     # Draw ground truth masks
     pred_label = "Damaged" if pred_annotation.damaged else "Normal"
-    true_label = "Damaged" if gt_annotation.damaged else "Normal"
+    if gt_annotation is not None:
+        true_label = "Damaged" if gt_annotation.damaged else "Normal"
+    else:
+        true_label = "N/A"
     pred_mask = pred_annotation.mask > 0.0
-    gt_mask = gt_annotation.mask > 0.0
+    if gt_annotation is not None and gt_annotation.mask is not None:
+        gt_mask = gt_annotation.mask > 0.0
+    else:
+        gt_mask = np.zeros_like(pred_mask)
     intersection = (gt_mask & pred_mask).sum()
     union = (gt_mask | pred_mask).sum()
     iou = intersection / union if union > 0.0 else 0.0
