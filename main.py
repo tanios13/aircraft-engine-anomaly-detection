@@ -61,8 +61,8 @@ def main(args: SimpleNamespace) -> None:
             preprocessor,
             args,
         )
-    elif os.path.isfile(args.input):
-        infer(Path(args.input), model, args.output_path)
+    elif os.path.isfile(args.input) or os.path.isdir(args.input):
+        infer(Path(args.input), model, args.output_path, background_remover, preprocessor, args)
     else:
         raise ValueError(f"Invalid input: {args.input!r}. Must be a known dataset or a valid image path.")
 

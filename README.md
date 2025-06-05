@@ -172,6 +172,20 @@ from aircraft_anomaly_detection.models import clip_predictor
 
 ---
 
+## Replicating the Results
+
+You can modify the run configurations in `configs/main_config.yaml`. Model-specific configurations for Owl-ViT and SAA are defined in `configs/owlvit_config.yaml` and `configs/saa_config.yaml`, respectively.
+
+To start training, run the following command:
+
+```bash
+python main.py --config configs/main_config.yaml --model_config configs/owlvit_config.yaml
+```
+
+To run inference (i.e., generate predictions on new datasets), update the `input` field in `configs/main_config.yaml` to point to the folder containing the new dataset. Also update the `output` field to specify the directory where the results should be saved.
+
+The output will be saved in COCO JSON format.
+
 ## License
 MIT License. See `LICENSE` for details.
 
